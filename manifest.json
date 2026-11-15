@@ -1,0 +1,192 @@
+{
+  "schemaVersion": 1,
+  "id": "crueber.agent-meters",
+  "name": "Agent Meters",
+  "version": "1.0.0",
+  "author": "Chris Rueber",
+  "license": "MIT",
+  "homepage": "https://github.com/crueber/omarchy-plugin-agent-meters",
+  "description": "One Omarchy bar widget for every AI agent you actually use: Claude, Grok, OpenCode and OpenRouter, each with its own mark and limit meters. Agents you have no subscription or key for stay out of the bar.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Agent Meters",
+    "description": "Marks and limit meters for the AI agents on this machine; only the ones you actually use are shown.",
+    "category": "AI",
+    "aliases": [
+      "agent-meters",
+      "agents",
+      "ai-agents",
+      "claude",
+      "grok",
+      "opencode",
+      "openrouter"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "barStyle": "bars",
+      "showClaude": true,
+      "showGrok": true,
+      "showOpencode": true,
+      "showOpenrouter": true,
+      "refreshIntervalSec": 300,
+      "warnPercent": 70,
+      "criticalPercent": 90,
+      "warningColor": "#f67400",
+      "criticalColor": "",
+      "nodeCommand": "",
+      "authFile": "",
+      "grokHome": "",
+      "botHome": "",
+      "opencodeCommand": "",
+      "showActivity": true,
+      "onRightClick": "",
+      "providerOrder": ""
+    },
+    "schema": [
+      {
+        "key": "barStyle",
+        "type": "enum",
+        "label": "Bar shows",
+        "options": [
+          "bars",
+          "text",
+          "icon"
+        ],
+        "defaultValue": "bars",
+        "description": "bars: each mark with one meter per limit window; text: the highest percentage per agent; icon: just the marks."
+      },
+      {
+        "key": "showClaude",
+        "type": "boolean",
+        "label": "Show Claude when signed in",
+        "defaultValue": true,
+        "description": "Claude appears only when Claude Code has a plan or usage on this machine."
+      },
+      {
+        "key": "showGrok",
+        "type": "boolean",
+        "label": "Show Grok when signed in",
+        "defaultValue": true
+      },
+      {
+        "key": "showOpencode",
+        "type": "boolean",
+        "label": "Show OpenCode when signed in",
+        "defaultValue": true
+      },
+      {
+        "key": "showOpenrouter",
+        "type": "boolean",
+        "label": "Show OpenRouter when keyed",
+        "defaultValue": true,
+        "description": "OpenRouter appears when a key is found in OPENROUTER_API_KEY or the OpenCode credential store."
+      },
+      {
+        "key": "providerOrder",
+        "type": "string",
+        "label": "Agent order",
+        "defaultValue": "",
+        "description": "Internally managed by the panel's up/down controls: comma-separated agent ids in bar order. Empty uses Claude, Grok, OpenCode, OpenRouter."
+      },
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 60,
+        "max": 3600,
+        "step": 60,
+        "defaultValue": 300,
+        "description": "How often to read every agent. Five minutes is the default; a disk cache avoids extra reads on shell restart."
+      },
+      {
+        "key": "warnPercent",
+        "type": "integer",
+        "label": "Warning threshold (%)",
+        "min": 0,
+        "max": 100,
+        "step": 5,
+        "defaultValue": 70,
+        "description": "Meters turn the warning colour at this percentage."
+      },
+      {
+        "key": "criticalPercent",
+        "type": "integer",
+        "label": "Critical threshold (%)",
+        "min": 0,
+        "max": 100,
+        "step": 5,
+        "defaultValue": 90,
+        "description": "Meters turn the urgent colour at this percentage."
+      },
+      {
+        "key": "warningColor",
+        "type": "string",
+        "label": "Warning colour",
+        "defaultValue": "#f67400",
+        "description": "Hex colour; empty keeps the theme foreground."
+      },
+      {
+        "key": "criticalColor",
+        "type": "string",
+        "label": "Critical colour",
+        "defaultValue": "",
+        "description": "Hex colour; empty uses the theme's urgent colour."
+      },
+      {
+        "key": "nodeCommand",
+        "type": "path",
+        "label": "Node executable",
+        "defaultValue": "",
+        "description": "Optional. Path to node for the collector; empty finds node in your login shell PATH."
+      },
+      {
+        "key": "authFile",
+        "type": "path",
+        "label": "OpenCode auth file",
+        "defaultValue": "",
+        "description": "Optional. OpenCode 1 credential file with the OpenRouter key; empty uses ~/.local/share/opencode/auth.json and then `opencode auth export`. OPENROUTER_API_KEY overrides this."
+      },
+      {
+        "key": "grokHome",
+        "type": "path",
+        "label": "Grok home",
+        "defaultValue": "",
+        "description": "Optional. Grok logs and session ledgers; empty uses $GROK_HOME or ~/.grok."
+      },
+      {
+        "key": "botHome",
+        "type": "path",
+        "label": "Grok Bot cache directory",
+        "defaultValue": "",
+        "description": "Optional. Grok Bot's sand-client-persistence directory; empty uses ~/.config/Grok Bot/sand-client-persistence."
+      },
+      {
+        "key": "opencodeCommand",
+        "type": "path",
+        "label": "opencode executable",
+        "defaultValue": "",
+        "description": "Optional. Path to the opencode binary; empty finds opencode in your login shell PATH."
+      },
+      {
+        "key": "showActivity",
+        "type": "boolean",
+        "label": "Show local activity in the popup",
+        "defaultValue": true,
+        "description": "Adds today's prompts and tokens per agent, read from the local records the agents already keep."
+      },
+      {
+        "key": "onRightClick",
+        "type": "string",
+        "label": "Right-click command",
+        "defaultValue": "",
+        "description": "Optional shell command; empty opens the Omarchy Agents documentation."
+      }
+    ]
+  }
+}

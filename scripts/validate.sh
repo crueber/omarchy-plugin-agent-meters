@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$repo_dir"
+
+command -v jq >/dev/null 2>&1 || {
+  echo "jq is required to validate the manifest" >&2
+  exit 1
+}
+
+jq -e '
+  .schemaVersion == 1
+  and (.id == "crueber.agent-meters")
+  and (.version | type == "string" and test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))
+  and (.kinds | type == "array" and index("bar-widget"))
+  and (.entryPoints.barWidget == "Panel.qml")
+  and (.barWidget.aliases | type == "array" and index("agent-meters"))
+  and (.barWidget.schema | type == "array")
+' manifest.json >/dev/null
+
+for file in Panel.qml ProviderMark.qml Model.js README.md LICENSE \
+  marks/ClaudeMark.qml marks/GrokMark.qml marks/OpencodeMark.qml marks/OpenRouterMark.qml \
+  scripts/collect.js scripts/grok.js; do
+  test -f "$file" || {
+    echo "missing required file: $file" >&2
+    exit 1
+  }
+done
+
+node --check scripts/collect.js
+node --check scripts/grok.js
+node scripts/test-model.js >/dev/null
+node scripts/test-collect.js >/dev/null
+
+if command -v omarchy >/dev/null 2>&1; then
+  omarchy plugin validate "$repo_dir"
+fi
+
+echo "ok"
