@@ -186,6 +186,95 @@ function collectClaude() {
   return provider
 }
 
+// -------------------------------------------------------------------- Codex
+
+// Codex's windows come from its app-server RPC through Omarchy's collector.
+// The general windows are titled "Session"/"Weekly" (or "5h window"), a
+// model's own allowance carries its name ("o3 Weekly"), and a Business seat
+// can report a "Spend limit" instead.
+const CODEX_BASE_ORDER = { session: 0, weekly: 1, review: 2, spend: 3, monthly: 4, other: 5 }
+
+function codexBase(title) {
+  const lower = String(title || '').toLowerCase()
+  if (lower.indexOf('review') >= 0) return 'review'
+  if (lower.indexOf('session') >= 0 || lower.indexOf('5-hour') >= 0 ||
+      lower.indexOf('5h') >= 0 || lower.indexOf('hour window') >= 0) return 'session'
+  if (lower.indexOf('week') >= 0 || lower.indexOf('7-day') >= 0) return 'weekly'
+  if (lower.indexOf('month') >= 0) return 'monthly'
+  if (lower.indexOf('spend') >= 0) return 'spend'
+  return 'other'
+}
+
+function codexLimit(entry, scale) {
+  const label = plain(entry && entry.title, 80) || plain(entry && entry.label, 80) || 'Limit'
+  const base = codexBase(label)
+  const scoped = typeof (entry && entry.title) === 'string' && entry.title.trim() !== ''
+  const short = base === 'session' ? '5h'
+    : base === 'weekly' ? '7d'
+      : base === 'monthly' ? '1m'
+        : base === 'review' ? 'rev'
+          : base === 'spend' ? '$'
+            : (label.slice(0, 6) || 'limit')
+  const detail = base === 'session' && !scoped ? 'Session (5-hour)'
+    : base === 'weekly' && !scoped ? 'Weekly (7-day)'
+      : label
+  return {
+    key: (scoped ? 'scoped-' : '') + base,
+    label: detail,
+    short: short,
+    detail: detail,
+    percent: clamp((number(entry && entry.percent) || 0) * scale, 0, 100),
+    resetsAt: dateMs(entry && entry.resetsAt),
+    stale: entry && entry.stale === true
+  }
+}
+
+function codexRank(key) {
+  const scoped = String(key || '').indexOf('scoped-') === 0
+  const base = scoped ? String(key).slice(7) : String(key)
+  return (scoped ? 10 : 0) + (CODEX_BASE_ORDER[base] === undefined ? 9 : CODEX_BASE_ORDER[base])
+}
+
+function collectCodex() {
+  const command = argValue('--codex') || 'omarchy-agent-usage-codex'
+  let record = runJson(command, ['--limits-only'])
+  if (!record) record = usageRecord('codex')
+
+  const provider = {
+    id: 'codex',
+    name: 'Codex',
+    available: false,
+    tier: '',
+    status: '',
+    hint: '',
+    error: '',
+    source: 'omarchy-agent-usage',
+    limits: [],
+    activity: activityOf(record),
+    money: null,
+    budgets: []
+  }
+  if (!record) {
+    provider.error = 'Codex usage record not found'
+    return provider
+  }
+
+  const list = Array.isArray(record.limits) ? record.limits : []
+  const scale = list.some(function(entry) { return (number(entry && entry.percent) || 0) > 1.5 }) ? 1 : 100
+  const limits = list
+    .filter(function(entry) { return entry && number(entry.percent) !== null })
+    .map(function(entry) { return codexLimit(entry, scale) })
+    .sort(function(a, b) { return codexRank(a.key) - codexRank(b.key) })
+
+  provider.tier = plain(record.tierLabel, 60)
+  provider.status = plain(record.usageStatusText, 120)
+  provider.hint = plain(record.authHelpText, 240)
+  provider.limits = limits
+  provider.activity = activityOf(record)
+  provider.available = limits.length > 0 || provider.tier !== ''
+  return provider
+}
+
 // --------------------------------------------------------------------- Grok
 
 function collectGrok() {
@@ -552,6 +641,7 @@ async function collectOpenRouter() {
 async function main() {
   const providers = await Promise.all([
     Promise.resolve().then(collectClaude).catch(function(e) { return null }),
+    Promise.resolve().then(collectCodex).catch(function(e) { return null }),
     Promise.resolve().then(collectGrok).catch(function(e) { return null }),
     Promise.resolve().then(collectOpencode).catch(function(e) { return null }),
     collectOpenRouter().catch(function(e) {

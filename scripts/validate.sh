@@ -20,7 +20,8 @@ jq -e '
 ' manifest.json >/dev/null
 
 for file in Panel.qml ProviderMark.qml Model.js README.md LICENSE \
-  marks/ClaudeMark.qml marks/GrokMark.qml marks/OpencodeMark.qml marks/OpenRouterMark.qml \
+  marks/ClaudeMark.qml marks/CodexMark.qml marks/GrokMark.qml \
+  marks/OpencodeMark.qml marks/OpenRouterMark.qml \
   scripts/collect.js scripts/grok.js; do
   test -f "$file" || {
     echo "missing required file: $file" >&2

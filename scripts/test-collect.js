@@ -36,6 +36,15 @@ else
   echo '[]'
 fi`)
 
+const codex = script('codex', `
+cat <<'JSON'
+{"tierLabel":"Plus","usageStatusText":"","authHelpText":"Run \`codex login\` to authenticate.","todayPrompts":1,"todayTotalTokens":400,
+ "limits":[{"label":"5h window","percent":0.25,"resetsAt":"2026-11-15T20:00:00Z"},
+           {"label":"Weekly (7-day)","percent":0.5,"resetsAt":"2026-11-20T00:00:00Z"},
+           {"label":"Code review","percent":0.1,"resetsAt":"2026-11-20T00:00:00Z"},
+           {"label":"o3 Weekly","title":"o3 Weekly","percent":0.08,"resetsAt":"2026-11-20T00:00:00Z"}]}
+JSON`)
+
 const claude = script('claude', `
 cat <<'JSON'
 {"tierLabel":"Max 5x","usageStatusText":"","todayPrompts":3,"todayTotalTokens":1200,"totalPrompts":9,
@@ -59,6 +68,7 @@ try {
     path.join(repo, 'scripts/collect.js'),
     '--opencode', opencode,
     '--claude', claude,
+    '--codex', codex,
     '--grok-home', grokHome,
     '--bot-home', grokHome
   ], { encoding: 'utf8', env: env, timeout: 30000 })
@@ -82,6 +92,18 @@ assert.strictEqual(byId.claude.limits[2].key, 'fable')
 assert.strictEqual(byId.claude.limits[2].percent, 8)
 assert.strictEqual(byId.claude.activity.prompts, 3)
 assert.strictEqual(byId.claude.activity.tokens, 1200)
+
+assert.ok(byId.codex, 'codex provider present')
+assert.strictEqual(byId.codex.available, true)
+assert.strictEqual(byId.codex.tier, 'Plus')
+assert.strictEqual(byId.codex.limits.length, 4)
+assert.strictEqual(byId.codex.limits[0].key, 'session')
+assert.strictEqual(byId.codex.limits[0].percent, 25)
+assert.strictEqual(byId.codex.limits[1].key, 'weekly')
+assert.strictEqual(byId.codex.limits[1].percent, 50)
+assert.strictEqual(byId.codex.limits[2].key, 'review')
+assert.strictEqual(byId.codex.limits[3].key, 'scoped-weekly')
+assert.strictEqual(byId.codex.limits[3].detail, 'o3 Weekly')
 
 assert.ok(byId.opencode, 'opencode provider present')
 assert.strictEqual(byId.opencode.available, true)

@@ -1,9 +1,9 @@
 # AGENTS.md
 
 Agent Meters — one Omarchy shell bar widget for the AI agents a machine
-actually uses (Claude, Grok, OpenCode, OpenRouter). It reuses the collectors
-and marks of the three single-agent plugins it replaces, adds Claude, and
-keeps agents with no plan, key or usage out of the bar.
+actually uses (OpenRouter, OpenCode, Grok, Codex, Claude). It reuses the
+collectors and marks of the three single-agent plugins it replaces, adds
+Codex and Claude, and keeps agents with no plan, key or usage out of the bar.
 
 ## Layout
 
@@ -26,6 +26,7 @@ keeps agents with no plan, key or usage out of the bar.
 | Provider | Source |
 | --- | --- |
 | Claude | `omarchy-agent-usage-claude --limits-only`, falling back to `~/.local/state/omarchy/agents/usage/claude.json` |
+| Codex | `omarchy-agent-usage-codex --limits-only`, falling back to `~/.local/state/omarchy/agents/usage/codex.json` |
 | Grok | `scripts/grok.js` over `~/.grok`; falls back to the Omarchy `grok.json` record |
 | OpenCode | `opencode api GET /api/experimental/usage/limits` (retries `--standalone`) |
 | OpenRouter | `OPENROUTER_API_KEY`, `auth.json`, or `opencode auth export`, then `/api/v1/key` + `/api/v1/credits` |
@@ -34,6 +35,12 @@ Claude's three windows arrive as percentages of 1 in Omarchy's record, so the
 collector scales a payload whose values are all ≤ 1.5 by 100. The labels map
 to keys `session`, `weekly`, `fable`, `monthly`; the Fable row is the scoped
 allowance that only Fable spends against.
+
+Codex comes from its app-server RPC: general windows are `5h window` and
+`Weekly (7-day)`, a Business seat can report `Spend limit`, and a model's own
+allowance carries its name in `title` (`o3 Weekly`), which maps to a
+`scoped-` key. `CODEX_BASE_ORDER` sorts general session/weekly/review before
+the scoped windows. An API-key sign-in has no plan limits and stays hidden.
 
 ## Invariants
 

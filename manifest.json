@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "crueber.agent-meters",
   "name": "Agent Meters",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Chris Rueber",
   "license": "MIT",
   "homepage": "https://github.com/crueber/omarchy-plugin-agent-meters",
-  "description": "One Omarchy bar widget for every AI agent you actually use: Claude, Grok, OpenCode and OpenRouter, each with its own mark and limit meters. Agents you have no subscription or key for stay out of the bar.",
+  "description": "One Omarchy bar widget for every AI agent you actually use: OpenRouter, OpenCode, Grok, Codex and Claude, each with its own mark and limit meters. Agents you have no subscription or key for stay out of the bar.",
   "kinds": [
     "bar-widget"
   ],
@@ -21,10 +21,11 @@
       "agent-meters",
       "agents",
       "ai-agents",
-      "claude",
-      "grok",
+      "openrouter",
       "opencode",
-      "openrouter"
+      "grok",
+      "codex",
+      "claude"
     ],
     "allowMultiple": false,
     "defaultSection": "right",
@@ -46,7 +47,9 @@
       "opencodeCommand": "",
       "showActivity": true,
       "onRightClick": "",
-      "providerOrder": ""
+      "providerOrder": "",
+      "showCodex": true,
+      "codexCommand": ""
     },
     "schema": [
       {
@@ -88,11 +91,18 @@
         "description": "OpenRouter appears when a key is found in OPENROUTER_API_KEY or the OpenCode credential store."
       },
       {
+        "key": "showCodex",
+        "type": "boolean",
+        "label": "Show Codex when signed in",
+        "defaultValue": true,
+        "description": "Codex appears only when Codex CLI has a plan with limits on this machine."
+      },
+      {
         "key": "providerOrder",
         "type": "string",
         "label": "Agent order",
         "defaultValue": "",
-        "description": "Internally managed by the panel's up/down controls: comma-separated agent ids in bar order. Empty uses Claude, Grok, OpenCode, OpenRouter."
+        "description": "Internally managed by the panel drag handle: comma-separated agent ids in bar order. Empty uses OpenRouter, OpenCode, Grok, Codex, Claude."
       },
       {
         "key": "refreshIntervalSec",
@@ -172,6 +182,13 @@
         "label": "opencode executable",
         "defaultValue": "",
         "description": "Optional. Path to the opencode binary; empty finds opencode in your login shell PATH."
+      },
+      {
+        "key": "codexCommand",
+        "type": "path",
+        "label": "Codex usage collector",
+        "defaultValue": "",
+        "description": "Optional. Path to `omarchy-agent-usage-codex`; empty uses the command on your login-shell PATH, then the saved usage record."
       },
       {
         "key": "showActivity",

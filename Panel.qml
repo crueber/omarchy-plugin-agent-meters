@@ -42,13 +42,15 @@ Panel {
   readonly property string grokHome: String(setting("grokHome", ""))
   readonly property string botHome: String(setting("botHome", ""))
   readonly property string opencodeCommand: String(setting("opencodeCommand", ""))
+  readonly property string codexCommand: String(setting("codexCommand", ""))
   readonly property bool showActivity: setting("showActivity", true) !== false
   readonly property string rightClickCommand: String(setting("onRightClick", ""))
   property var visibility: ({
     claude: setting("showClaude", true) !== false,
     grok: setting("showGrok", true) !== false,
     opencode: setting("showOpencode", true) !== false,
-    openrouter: setting("showOpenrouter", true) !== false
+    openrouter: setting("showOpenrouter", true) !== false,
+    codex: setting("showCodex", true) !== false
   })
   // Written by the panel's reorder controls; comma-separated agent ids. Kept
   // writable so a move repaints immediately, before shell.json reloads.
@@ -359,6 +361,7 @@ Panel {
     if (root.grokHome !== "") command += " --grok-home " + Model.shellQuote(root.grokHome)
     if (root.botHome !== "") command += " --bot-home " + Model.shellQuote(root.botHome)
     if (root.opencodeCommand !== "") command += " --opencode " + Model.shellQuote(root.opencodeCommand)
+    if (root.codexCommand !== "") command += " --codex " + Model.shellQuote(root.codexCommand)
     return command
   }
 

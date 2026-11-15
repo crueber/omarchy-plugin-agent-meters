@@ -6,7 +6,7 @@
 // whole file is unit-testable with plain Node.
 
 var CACHE_VERSION = 1
-var PROVIDER_ORDER = ["claude", "grok", "opencode", "openrouter"]
+var PROVIDER_ORDER = ["openrouter", "opencode", "grok", "codex", "claude"]
 var AUTO_MIN_MS = 60000
 var FORCE_MIN_MS = 30000
 var FAILURE_CAP_MS = 600000

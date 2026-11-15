@@ -82,27 +82,29 @@ test('rejects an unreadable or failed result', function() {
 
 test('orders and filters the visible providers', function() {
   const list = [
-    provider({ id: 'openrouter' }),
-    provider({ id: 'opencode' }),
-    provider({ id: 'grok' }),
     provider({ id: 'claude' }),
+    provider({ id: 'codex' }),
+    provider({ id: 'grok' }),
+    provider({ id: 'opencode' }),
+    provider({ id: 'openrouter' }),
     provider({ id: 'grok', available: false })
   ]
   const order = M.visibleProviders(list, {}).map(function(p) { return p.id }).join(',')
-  assert.strictEqual(order, 'claude,grok,opencode,openrouter')
+  assert.strictEqual(order, 'openrouter,opencode,grok,codex,claude')
   const hidden = M.visibleProviders(list, { claude: false, openrouter: false }).map(function(p) { return p.id }).join(',')
-  assert.strictEqual(hidden, 'grok,opencode')
+  assert.strictEqual(hidden, 'opencode,grok,codex')
 })
 
 test('honours a saved agent order and moves within it', function() {
   const list = [
-    provider({ id: 'openrouter' }),
-    provider({ id: 'opencode' }),
+    provider({ id: 'claude' }),
+    provider({ id: 'codex' }),
     provider({ id: 'grok' }),
-    provider({ id: 'claude' })
+    provider({ id: 'opencode' }),
+    provider({ id: 'openrouter' })
   ]
   const ordered = M.orderedProviders(list, {}, 'grok,claude').map(function(p) { return p.id }).join(',')
-  assert.strictEqual(ordered, 'grok,claude,opencode,openrouter')
+  assert.strictEqual(ordered, 'grok,claude,openrouter,opencode,codex')
   assert.strictEqual(M.parseOrder('grok, bogus, grok, claude').join(','), 'grok,claude')
   assert.strictEqual(M.moveOrder('grok,claude,opencode,openrouter', 'claude', -1).join(','), 'claude,grok,opencode,openrouter')
   assert.strictEqual(M.moveOrder('claude,grok', 'claude', -1).join(','), 'claude,grok')
@@ -110,14 +112,14 @@ test('honours a saved agent order and moves within it', function() {
 })
 
 test('computes a drag-and-drop insertion order', function() {
-  const all = ['claude', 'grok', 'opencode', 'openrouter']
-  assert.strictEqual(M.reorderInsert('', all, 'openrouter', 0).join(','), 'openrouter,claude,grok,opencode')
-  assert.strictEqual(M.reorderInsert('', all, 'claude', 3).join(','), 'grok,opencode,openrouter,claude')
-  assert.strictEqual(M.reorderInsert('', all, 'grok', 1).join(','), 'claude,grok,opencode,openrouter')
-  // A hidden agent keeps its slot when two visible agents swap around it.
-  assert.strictEqual(M.reorderInsert('claude,grok,opencode', ['claude', 'opencode'], 'opencode', 0).join(','), 'opencode,claude,grok,openrouter')
-  assert.strictEqual(M.reorderInsert('', all, 'claude', 99).join(','), 'grok,opencode,openrouter,claude')
-  assert.strictEqual(M.reorderInsert('', all, 'claude', -5).join(','), 'claude,grok,opencode,openrouter')
+  const all = ['openrouter', 'opencode', 'grok', 'codex', 'claude']
+  assert.strictEqual(M.reorderInsert('', all, 'claude', 0).join(','), 'claude,openrouter,opencode,grok,codex')
+  assert.strictEqual(M.reorderInsert('', all, 'openrouter', 4).join(','), 'opencode,grok,codex,claude,openrouter')
+  assert.strictEqual(M.reorderInsert('', all, 'grok', 2).join(','), 'openrouter,opencode,grok,codex,claude')
+  // A hidden agent keeps its slot when a visible agent moves around it.
+  assert.strictEqual(M.reorderInsert('openrouter,opencode,grok,codex,claude', ['opencode', 'claude'], 'claude', 0).join(','), 'openrouter,claude,opencode,grok,codex')
+  assert.strictEqual(M.reorderInsert('', all, 'claude', 99).join(','), 'openrouter,opencode,grok,codex,claude')
+  assert.strictEqual(M.reorderInsert('', all, 'claude', -5).join(','), 'claude,openrouter,opencode,grok,codex')
 })
 
 test('filters shown agents without changing their order', function() {

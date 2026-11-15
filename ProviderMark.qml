@@ -15,6 +15,7 @@ Item {
 
   function markFile(id) {
     if (id === "claude") return "Claude"
+    if (id === "codex") return "Codex"
     if (id === "grok") return "Grok"
     if (id === "opencode") return "Opencode"
     if (id === "openrouter") return "OpenRouter"
