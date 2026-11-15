@@ -120,6 +120,17 @@ test('computes a drag-and-drop insertion order', function() {
   assert.strictEqual(M.reorderInsert('', all, 'claude', -5).join(','), 'claude,grok,opencode,openrouter')
 })
 
+test('filters shown agents without changing their order', function() {
+  const list = [
+    provider({ id: 'opencode' }),
+    provider({ id: 'claude' }),
+    provider({ id: 'openrouter' })
+  ]
+  assert.strictEqual(M.shownProviders(list, {}).map(function(p) { return p.id }).join(','), 'opencode,claude,openrouter')
+  assert.strictEqual(M.shownProviders(list, { claude: false }).map(function(p) { return p.id }).join(','), 'opencode,openrouter')
+  assert.strictEqual(M.shownProviders(list, { claude: false, opencode: false, openrouter: false }).length, 0)
+})
+
 test('maps percentages to states at the configured thresholds', function() {
   assert.strictEqual(M.stateOf(12, 70, 90), 'normal')
   assert.strictEqual(M.stateOf(70, 70, 90), 'warning')

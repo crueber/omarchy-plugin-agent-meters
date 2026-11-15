@@ -46,7 +46,12 @@ allowance that only Fable spends against.
    cycle is only used when observed near its end.
 5. Failed provider reads keep their last good numbers and gain `error`.
 6. Any text from a file or network goes through `plain()` before display.
-7. Bar order is the widget's `providerOrder` setting (comma-separated ids).
+7. `panelProviders` is every available agent in `providerOrder` order;
+   `visibleProviders` removes the ones whose `show<Agent>` setting is false.
+   The panel lists `panelProviders` (so a hidden agent can be switched back on)
+   and the bar lists `visibleProviders`. The switch calls
+   `omarchy bar set crueber.agent-meters show<Agent> true|false --json`.
+8. Bar order is the widget's `providerOrder` setting (comma-separated ids).
    The panel's drag handle reports a drop index in section coordinates;
    `Model.reorderInsert` returns the full order (keeping hidden agents in
    place) and the panel persists it through

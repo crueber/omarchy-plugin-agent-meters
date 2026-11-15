@@ -35,10 +35,13 @@ can see. The bar then filters that list:
   `OPENROUTER_API_KEY`, the OpenCode `auth.json`, or OpenCode 2's
   `opencode auth export`; never from the widget's own cache.
 
-Each agent can be turned off in the widget settings without removing the
-others. In the panel, drag an agent's row by its grip handle to reorder it; the
-same order is used for the icons in the bar and is saved with the widget.
-Dropping on the last row's lower half moves the agent to the end.
+Each agent has a switch in its panel row. It defaults to on; flip it off and
+that agent stays in the panel (so you can read it or turn it back on) but
+leaves the bar. The switch writes the same `showClaude`/`showGrok`/
+`showOpencode`/`showOpenrouter` settings the widget exposes, so the two stay in
+step. In the panel, drag a row by its grip handle to reorder it; the same order
+is used for the icons in the bar and is saved with the widget. Dropping on the
+last row's lower half moves the agent to the end.
 
 ## Install
 
@@ -88,7 +91,7 @@ record in `~/.local/state/omarchy/agents/usage/claude.json`.
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `barStyle` | `bars` | `bars`, `text` (highest percentage) or `icon` |
-| `showClaude` / `showGrok` / `showOpencode` / `showOpenrouter` | `true` | Keep an agent out of the bar even when detected |
+| `showClaude` / `showGrok` / `showOpencode` / `showOpenrouter` | `true` | Show that agent in the bar; the panel switch flips the same keys |
 | `providerOrder` | `""` | Saved by the panel's drag-and-drop order; comma-separated agent ids |
 | `refreshIntervalSec` | `300` | How often to collect (60–3600) |
 | `warnPercent` | `70` | Warning colour threshold |

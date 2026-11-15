@@ -44,7 +44,7 @@ Panel {
   readonly property string opencodeCommand: String(setting("opencodeCommand", ""))
   readonly property bool showActivity: setting("showActivity", true) !== false
   readonly property string rightClickCommand: String(setting("onRightClick", ""))
-  readonly property var visibility: ({
+  property var visibility: ({
     claude: setting("showClaude", true) !== false,
     grok: setting("showGrok", true) !== false,
     opencode: setting("showOpencode", true) !== false,
@@ -79,7 +79,9 @@ Panel {
   property bool pollLeader: false
   property int consumedSeq: 0
 
-  readonly property var visibleProviders: Model.orderedProviders(providers, visibility, providerOrder)
+  readonly property var panelProviders: Model.orderedProviders(providers, {}, providerOrder)
+  readonly property var visibleProviders: Model.shownProviders(panelProviders, visibility)
+  readonly property int hiddenCount: panelProviders.length - visibleProviders.length
 
   // Drag-to-reorder state. The ghost and insertion line live in the panel's
   // Flickable content, in the same coordinates as the sections.
@@ -112,7 +114,8 @@ Panel {
   }
   readonly property string heroMeta: {
     var parts = []
-    if (visibleProviders.length > 0) parts.push(visibleProviders.length + (visibleProviders.length === 1 ? " agent" : " agents"))
+    if (panelProviders.length > 0) parts.push(panelProviders.length + (panelProviders.length === 1 ? " agent" : " agents"))
+    if (hiddenCount > 0) parts.push(hiddenCount + " hidden")
     var updated = Model.updatedText(root.lastFetchMs, root.nowMs)
     if (updated !== "") parts.push(updated.replace(/^Updated /, ""))
     if (lastErrorMessage !== "") parts.push("read failed")
@@ -126,13 +129,39 @@ Panel {
     parts.push("local agent records")
     return parts.join(" · ")
   }
-  readonly property string tooltipText: Model.tooltip(visibleProviders, history, nowMs, warnPercent, criticalPercent)
+  readonly property string tooltipText: visibleProviders.length > 0
+    ? Model.tooltip(visibleProviders, history, nowMs, warnPercent, criticalPercent)
+    : (panelProviders.length > 0
+      ? "All agents are hidden from the bar\nOpen Agent Meters to show one"
+      : "No AI agents found")
 
   function stateColor(name) {
     if (name === "critical") return criticalColor !== "" ? criticalColor : urgent
     if (name === "warning") return warningColor !== "" ? warningColor : foreground
     if (name === "yellow") return compareColor
     return foreground
+  }
+
+  function isShown(id) {
+    return !visibility || visibility[id] !== false
+  }
+
+  function showKey(id) {
+    return "show" + id.charAt(0).toUpperCase() + id.slice(1)
+  }
+
+  // Flip one agent in the bar and persist the same setting the widget's
+  // schema exposes, so the switch and the settings page stay in step.
+  function setShown(id, shown) {
+    if (id === "") return
+    var next = {}
+    for (var key in visibility) next[key] = visibility[key]
+    next[id] = shown
+    root.visibility = next
+    orderProc.command = ["/bin/sh", "-lc",
+      "omarchy bar set " + Model.shellQuote(root.moduleName) + " " + Model.shellQuote(showKey(id))
+      + (shown ? " true" : " false") + " --json"]
+    orderProc.running = true
   }
 
   function saveProviderOrder(order) {
@@ -155,7 +184,7 @@ Panel {
 
   function moveProvider(id, delta) {
     var ids = []
-    for (var i = 0; i < visibleProviders.length; i++) ids.push(visibleProviders[i].id)
+    for (var i = 0; i < panelProviders.length; i++) ids.push(panelProviders[i].id)
     var from = ids.indexOf(id)
     if (from < 0) return
     var targetId = ids[from + delta]
@@ -172,7 +201,7 @@ Panel {
   // Insert `id` at `insertIndex` in the list without the dragged agent.
   function reorderProvider(id, insertIndex) {
     var ids = []
-    for (var i = 0; i < visibleProviders.length; i++) ids.push(visibleProviders[i].id)
+    for (var i = 0; i < panelProviders.length; i++) ids.push(panelProviders[i].id)
     saveProviderOrder(Model.reorderInsert(providerOrder, ids, id, insertIndex))
   }
 
@@ -197,8 +226,8 @@ Panel {
   }
 
   function providerName(id) {
-    for (var i = 0; i < visibleProviders.length; i++) {
-      if (visibleProviders[i].id === id) return visibleProviders[i].name
+    for (var i = 0; i < panelProviders.length; i++) {
+      if (panelProviders[i].id === id) return panelProviders[i].name
     }
     return id
   }
@@ -209,8 +238,8 @@ Panel {
     root.dragProviderId = id
     root.dragPointerY = point.y
     root.dropIndex = 0
-    for (var i = 0; i < visibleProviders.length; i++) {
-      if (visibleProviders[i].id === id) { root.dropIndex = i; break }
+    for (var i = 0; i < panelProviders.length; i++) {
+      if (panelProviders[i].id === id) { root.dropIndex = i; break }
     }
   }
 
@@ -225,8 +254,8 @@ Panel {
     if (!root.dragging) return
     var id = root.dragProviderId
     var from = -1
-    for (var i = 0; i < visibleProviders.length; i++) {
-      if (visibleProviders[i].id === id) from = i
+    for (var i = 0; i < panelProviders.length; i++) {
+      if (panelProviders[i].id === id) from = i
     }
     if (from >= 0) {
       var to = root.dropIndex
@@ -750,7 +779,7 @@ Panel {
           PanelSeparator { foreground: root.foreground }
 
           Column {
-            visible: root.visibleProviders.length === 0
+            visible: root.panelProviders.length === 0
             width: parent.width
             spacing: Style.space(4)
 
@@ -779,7 +808,7 @@ Panel {
 
           Repeater {
             id: sectionsRepeater
-            model: root.visibleProviders
+            model: root.panelProviders
             delegate: ProviderSection { provider: modelData }
           }
 
@@ -894,6 +923,22 @@ Panel {
       width: parent.width
       implicitHeight: sectionHeader.implicitHeight
 
+    MouseArea {
+      id: sectionDrag
+      anchors.fill: parent
+      hoverEnabled: true
+      preventStealing: true
+      cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+      onPressed: function(mouse) {
+        root.startSectionDrag(section.provider ? section.provider.id : "", sectionDrag, mouse)
+      }
+      onPositionChanged: function(mouse) {
+        if (pressed) root.updateSectionDrag(sectionDrag, mouse)
+      }
+      onReleased: function(mouse) { root.endSectionDrag() }
+      onCanceled: root.cancelSectionDrag()
+    }
+
     Row {
       id: sectionHeader
       width: parent.width
@@ -909,7 +954,7 @@ Panel {
 
       Column {
         width: Math.max(0, sectionHeader.width - sectionMark.width - sectionValue.width
-          - sectionGrip.width - sectionHeader.spacing * 3)
+          - sectionToggle.width - sectionGrip.width - sectionHeader.spacing * 4)
         anchors.verticalCenter: parent.verticalCenter
         spacing: Style.space(2)
 
@@ -933,6 +978,7 @@ Panel {
             var parts = []
             if (section.provider.tier !== "") parts.push(section.provider.tier)
             if (section.provider.status !== "") parts.push(section.provider.status)
+            if (!root.isShown(section.provider.id)) parts.push("Hidden from bar")
             return parts.join(" · ")
           }
           color: section.provider && section.provider.status !== "" && sectionWindows().length === 0
@@ -955,6 +1001,17 @@ Panel {
         font.bold: true
       }
 
+      ToggleSwitch {
+        id: sectionToggle
+        anchors.verticalCenter: parent.verticalCenter
+        checked: root.isShown(section.provider ? section.provider.id : "")
+        trackHeight: Style.space(16)
+        foreground: root.foreground
+        accent: Commons.Color.accent
+        onToggled: root.setShown(section.provider ? section.provider.id : "",
+          !root.isShown(section.provider ? section.provider.id : ""))
+      }
+
       Text {
         id: sectionGrip
         textFormat: Text.PlainText
@@ -966,21 +1023,7 @@ Panel {
       }
     }
 
-    MouseArea {
-      id: sectionDrag
-      anchors.fill: parent
-      hoverEnabled: true
-      preventStealing: true
-      cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-      onPressed: function(mouse) {
-        root.startSectionDrag(section.provider ? section.provider.id : "", sectionDrag, mouse)
-      }
-      onPositionChanged: function(mouse) {
-        if (pressed) root.updateSectionDrag(sectionDrag, mouse)
-      }
-      onReleased: function(mouse) { root.endSectionDrag() }
-      onCanceled: root.cancelSectionDrag()
-    }
+
     }
 
     Text {

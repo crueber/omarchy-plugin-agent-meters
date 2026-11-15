@@ -359,6 +359,19 @@ function reorderInsert(orderValue, visibleIds, id, insertIndex) {
   return order
 }
 
+// Filter an already-ordered list by the per-agent show switches, keeping the
+// order intact (visibleProviders re-sorts by the default provider order).
+function shownProviders(list, visibility) {
+  var out = []
+  for (var i = 0; i < (list || []).length; i++) {
+    var provider = list[i]
+    if (!provider) continue
+    if (visibility && visibility[provider.id] === false) continue
+    out.push(provider)
+  }
+  return out
+}
+
 function providerById(providers, id) {
   for (var i = 0; i < (providers || []).length; i++) {
     if (providers[i] && providers[i].id === id) return providers[i]
