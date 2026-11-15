@@ -7,6 +7,9 @@ stays out of the bar. That is also the default bar order.
 
 ![Agent Meters in the Omarchy bar and its panel](preview.png)
 
+All images in this repository are composed from invented data: no real key,
+account, workspace, spend, credits or usage figure is shown.
+
 Agent Meters is the unified successor to three separate widgets — [OpenRouter
 Usage](#predecessors), [OpenCode Go Usage](#predecessors) and [Grok
 Usage](#predecessors) — with Codex and Claude added. The individual plugins
@@ -239,12 +242,10 @@ omarchy plugin add https://github.com/crueber/omarchy-plugin-agent-meters --enab
 The command validates the manifest before installing and enables the widget in
 the right bar section.
 
-Or clone the repo and run the installer, which also places the widget in the
-right section:
+From a local checkout, the installer does the same deployment:
 
 ```bash
-git clone https://github.com/crueber/omarchy-plugin-agent-meters.git
-cd omarchy-plugin-agent-meters
+cd /path/to/omarchy-plugin-agent-meters
 ./scripts/install.sh
 ```
 
@@ -467,6 +468,28 @@ scripts/install.sh     deploy to the live plugin directory
 scripts/validate.sh    manifest + files + tests + omarchy plugin validate
 ```
 
+## Marketplace capability notes
+
+This repository ships one installer and no screenshot or demo-capture script.
+
+- **Installer (`installer` capability).** `scripts/install.sh` copies the
+  reviewed runtime files into
+  `~/.config/omarchy/plugins/crueber.agent-meters/`, validates the manifest,
+  rescans the shell and enables the widget. It uses no sudo, no network and no
+  build step, and writes nowhere else.
+- **No remote build.** The documented install is `omarchy plugin add`; the
+  plugin does not fetch or execute code from the network.
+- **Local executables.** Runtime reads use only `node`, `opencode`,
+  `omarchy-agent-usage-claude` and `omarchy-agent-usage-codex` (each
+  configurable), plus the local files described above.
+- **Network.** Only OpenRouter's `/api/v1/key` and `/api/v1/credits`, with the
+  key in an HTTPS header. Claude's and Codex's probes belong to Omarchy's
+  collectors.
+- **Previews.** `preview.png` and `screenshots/bar.png` are composed offline
+  from a synthetic fixture. No real key, account, workspace, spend, credits or
+  usage appears. There is no demo or capture script to run, and therefore no
+  temporary copies of live caches or settings.
+
 ## Marketplace facts
 
 - **Plugin id:** `crueber.agent-meters`
@@ -480,7 +503,7 @@ scripts/validate.sh    manifest + files + tests + omarchy plugin validate
 - **IPC target:** `agent-meters`
 - **Licence:** MIT
 - **Source:** https://github.com/crueber/omarchy-plugin-agent-meters
-- **Preview:** `preview.png` (panel) and `screenshots/bar.png`
+- **Preview:** `preview.png` (bar and panel) and `screenshots/bar.png`
 - **Validation:** `./scripts/validate.sh` and `omarchy plugin validate`
 - **Install / remove:** standard `omarchy plugin add` / `omarchy plugin remove`
 

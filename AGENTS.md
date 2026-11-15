@@ -58,7 +58,10 @@ the scoped windows. An API-key sign-in has no plan limits and stays hidden.
    The panel lists `panelProviders` (so a hidden agent can be switched back on)
    and the bar lists `visibleProviders`. The switch calls
    `omarchy bar set crueber.agent-meters show<Agent> true|false --json`.
-8. Bar order is the widget's `providerOrder` setting (comma-separated ids).
+8. A missing cache must fetch once leadership settles; do not leave the first
+   read to the five-minute poll. `Component.onCompleted` and the five-second
+   election timer both ask for the read when no provider is loaded.
+9. Bar order is the widget's `providerOrder` setting (comma-separated ids).
    The panel's drag handle reports a drop index in section coordinates;
    `Model.reorderInsert` returns the full order (keeping hidden agents in
    place) and the panel persists it through

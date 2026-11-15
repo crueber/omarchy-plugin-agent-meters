@@ -14,7 +14,14 @@
   displayed.
 - The panel can grow to fit four agents without scrolling on a normal screen.
 - Preview is one unified image: the bar meters above the panel, in the style
-  of the three predecessor plugins.
+  of the three predecessor plugins, and it uses invented data only.
+- No demo or capture script ships, so there is no temporary copy of live
+  caches or settings; marketplace capability notes document the installer and
+  runtime scope.
+- A fresh install with no cache now fetches as soon as leadership settles
+  instead of waiting for the next five-minute poll.
+- The panel height cap accommodates five agents on a large screen and still
+  clamps to smaller ones.
 
 ## 1.1.0 — 2026-11-15
 

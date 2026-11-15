@@ -427,6 +427,14 @@ Panel {
   Component.onCompleted: {
     Model.pollClaim(root, Date.now())
     root.pollLeader = Model.pollLeaderInstance() === root
+    // A missing cache leaves the first fetch to the FileView, which may run
+    // before leadership is settled. Ask once afterwards so a fresh install
+    // paints in seconds instead of waiting for the next five-minute poll.
+    if (root.pollLeader) {
+      Qt.callLater(function() {
+        if (root.providers.length === 0 && !fetchProc.running) root.requestFetch("auto")
+      })
+    }
   }
 
   FileView {
@@ -508,7 +516,13 @@ Panel {
     interval: 5000
     running: true
     repeat: true
-    onTriggered: root.pollLeader = Model.pollClaim(root, Date.now())
+    onTriggered: {
+      var wasLeader = root.pollLeader
+      root.pollLeader = Model.pollClaim(root, Date.now())
+      if (!wasLeader && root.pollLeader && root.providers.length === 0 && !fetchProc.running) {
+        root.requestFetch("auto")
+      }
+    }
   }
 
   Timer {
@@ -726,7 +740,7 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(380))
-    contentHeight: panel.fittedContentHeight(panelColumn.implicitHeight, Style.space(900))
+    contentHeight: panel.fittedContentHeight(panelColumn.implicitHeight, Style.space(1200))
 
     PanelKeyCatcher {
       id: keyCatcher

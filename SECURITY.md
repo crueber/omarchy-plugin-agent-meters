@@ -57,6 +57,13 @@ HTTP responses are size- and time-limited. Plugin settings are read through
 Omarchy's widget API and never interpolated into a shell command without
 quoting.
 
+## Preview images
+
+`preview.png` and `screenshots/bar.png` are composed offline from invented
+data. No real key, account, workspace, spend, credit or usage figure appears in
+them. The repository ships no demo or screenshot-capture script, so there is no
+code path that copies live caches or settings into a temporary directory.
+
 ## Supported versions
 
 Fixes land on `main` and in the latest release. The marketplace version is the
