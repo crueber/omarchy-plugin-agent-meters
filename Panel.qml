@@ -43,6 +43,7 @@ Panel {
   readonly property string botHome: String(setting("botHome", ""))
   readonly property string opencodeCommand: String(setting("opencodeCommand", ""))
   readonly property string codexCommand: String(setting("codexCommand", ""))
+  readonly property string claudeCommand: String(setting("claudeCommand", ""))
   readonly property bool showActivity: setting("showActivity", true) !== false
   readonly property string rightClickCommand: String(setting("onRightClick", ""))
   property var visibility: ({
@@ -362,6 +363,7 @@ Panel {
     if (root.botHome !== "") command += " --bot-home " + Model.shellQuote(root.botHome)
     if (root.opencodeCommand !== "") command += " --opencode " + Model.shellQuote(root.opencodeCommand)
     if (root.codexCommand !== "") command += " --codex " + Model.shellQuote(root.codexCommand)
+    if (root.claudeCommand !== "") command += " --claude " + Model.shellQuote(root.claudeCommand)
     return command
   }
 

@@ -8,6 +8,7 @@
   monthly) instead of always saying "Weekly limit".
 - README rewritten as the full user guide, with predecessor links,
   troubleshooting and marketplace facts; SECURITY.md added.
+- `claudeCommand` setting for an absolute path to the Claude collector.
 
 ## 1.1.0 — 2026-11-15
 

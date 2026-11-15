@@ -212,8 +212,8 @@ Schedule and caching:
   endpoint being down never blanks the other agents.
 
 Claude and Codex collectors are invoked from the login-shell PATH. Set
-`nodeCommand`, `codexCommand` or the other command paths if your shell needs an
-absolute path.
+`nodeCommand`, `opencodeCommand`, `codexCommand` or `claudeCommand` if your
+shell needs an absolute path.
 
 ## Colours and thresholds
 
@@ -331,6 +331,7 @@ omarchy bar set crueber.agent-meters showCodex false --json
 | `botHome` | `""` | Optional Grok Bot cache directory |
 | `opencodeCommand` | `""` | Optional path to `opencode` |
 | `codexCommand` | `""` | Optional path to `omarchy-agent-usage-codex` |
+| `claudeCommand` | `""` | Optional path to `omarchy-agent-usage-claude` |
 | `showActivity` | `true` | Show the local-activity line per agent |
 | `onRightClick` | `""` | Optional shell command for right click |
 
