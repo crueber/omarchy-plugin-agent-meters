@@ -277,6 +277,13 @@ function collectCodex() {
 
 // --------------------------------------------------------------------- Grok
 
+function grokPeriod(periodType) {
+  const value = String(periodType || '').toUpperCase()
+  if (value.indexOf('MONTH') >= 0) return { short: 'mo', detail: 'Monthly limit' }
+  if (value.indexOf('DAY') >= 0) return { short: 'day', detail: 'Daily limit' }
+  return { short: 'wk', detail: 'Weekly limit' }
+}
+
 function collectGrok() {
   const args = [path.join(__dirname, 'grok.js')]
   const grokHome = argValue('--grok-home')
@@ -306,11 +313,12 @@ function collectGrok() {
     provider.tier = plain(raw.tier, 60)
     const weekly = raw.weekly
     if (weekly && number(weekly.usedPercent) !== null) {
+      const period = grokPeriod(weekly.periodType)
       provider.limits.push({
         key: 'weekly',
         label: 'Weekly',
-        short: 'wk',
-        detail: weekly.periodType === 'USAGE_PERIOD_TYPE_MONTHLY' ? 'Monthly limit' : 'Weekly limit',
+        short: period.short,
+        detail: period.detail,
         percent: clamp(number(weekly.usedPercent) || 0, 0, 100),
         resetsAt: dateMs(weekly.resetsAt),
         stale: weekly.expired === true
@@ -435,7 +443,7 @@ function collectOpencode() {
       detail: window.detail,
       percent: clamp(percent, 0, 100),
       resetsAt: dateMs(entry.resetsAt),
-      stale: entry.limited === true
+      stale: false
     })
   })
 

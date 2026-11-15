@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.1 — 2026-11-15
+
+- An OpenCode window at its limit is no longer marked stale: it keeps its
+  percentage and colour instead of turning into an em dash.
+- Grok's plan window is labelled from its own period (daily, weekly or
+  monthly) instead of always saying "Weekly limit".
+- README rewritten as the full user guide, with predecessor links,
+  troubleshooting and marketplace facts; SECURITY.md added.
+
 ## 1.1.0 — 2026-11-15
 
 - Codex support: session and weekly limits, code-review windows, model-scoped

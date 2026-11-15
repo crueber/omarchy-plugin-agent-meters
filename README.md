@@ -1,60 +1,248 @@
 # Agent Meters
 
 One Omarchy bar widget for every AI agent this machine actually uses.
-OpenRouter, OpenCode, Grok, Codex and Claude each keep their own mark and their
-own limit meters; an agent you have no plan, key or usage for simply stays out
-of the bar. That is also the default bar order.
+**OpenRouter, OpenCode, Grok, Codex and Claude** each keep their own mark and
+their own limit meters; an agent you have no plan, key or usage for simply
+stays out of the bar. That is also the default bar order.
 
-![Agent Meters in the bar and its panel](preview.png)
+![Agent Meters panel](preview.png)
 
-## What it shows
+![Agent Meters in the Omarchy bar](screenshots/bar.png)
 
-| Agent | Bar | Window rows |
+Agent Meters is the unified successor to three separate widgets — [OpenRouter
+Usage](#predecessors), [OpenCode Go Usage](#predecessors) and [Grok
+Usage](#predecessors) — with Codex and Claude added. The individual plugins
+remain available if you prefer one agent per widget.
+
+## Contents
+
+- [What you get](#what-you-get)
+- [Automatic selection](#automatic-selection)
+- [Order, switches and dragging](#order-switches-and-dragging)
+- [Each agent in detail](#each-agent-in-detail)
+- [How it fetches](#how-it-fetches)
+- [Colours and thresholds](#colours-and-thresholds)
+- [Install](#install)
+- [Use](#use)
+- [Settings](#settings)
+- [Privacy and security](#privacy-and-security)
+- [Troubleshooting](#troubleshooting)
+- [Remove](#remove)
+- [Predecessors](#predecessors)
+- [Development](#development)
+- [Marketplace facts](#marketplace-facts)
+- [Licence](#licence)
+
+## What you get
+
+| Agent | Bar | Panel rows |
 | --- | --- | --- |
-| **OpenRouter** | OpenRouter mark + meter, or dollars | This cycle's spend against the key's own limit, credits, reset |
-| **OpenCode** | OpenCode mark + three bars | 5-hour session, weekly, monthly; Console budgets in the panel |
-| **Grok** | Grok mark + weekly meter | Weekly and, when the desktop app caches one, Grok Bot's separate weekly allowance |
-| **Codex** | Codex mark + session/weekly meters | Session and weekly limits, Code review, model-scoped allowances and a Business seat's spend cap when the app-server reports them |
-| **Claude** | Anthropic asterisk + up to three bars | Session (5-hour), Weekly (7-day), Fable weekly |
+| **OpenRouter** | OpenRouter mark + meter, or dollars | This cycle's spend against the key's own limit, previous cycle, credits, reset |
+| **OpenCode** | OpenCode mark + up to three meters | 5-hour session, weekly, monthly, Console budgets, today's activity |
+| **Grok** | Grok mark + weekly meter | Weekly or monthly plan limit, Grok Bot's separate weekly allowance, this week's local activity |
+| **Codex** | Codex mark + session/weekly meters | Session, weekly, code review, model-scoped allowances, a Business seat's spend cap |
+| **Claude** | Anthropic asterisk + up to three meters | Session (5-hour), weekly (7-day), Fable weekly |
 
-The Claude rows come from Anthropic's own usage endpoint through Omarchy's
-agent collector, so the **Fable weekly** allowance — the model-scoped window
-that only Fable draws from — is the third bar, not a separate agent.
+Every agent gets:
+
+- its mark drawn as a monochrome QML vector, so it follows the theme foreground
+  and stays crisp at bar sizes;
+- one meter per limit window, coloured by that window's own state;
+- a panel section with percentages, meters, reset countdowns and clocks;
+- an optional local-activity line (today, or this week for Grok);
+- a show switch and a drag handle.
+
+The agent marks are deliberately **not** tinted by state. When something is at
+its limit, the meter, the percentage and the bar's active state turn urgent;
+the mark stays in the theme foreground beside its neighbours.
 
 ## Automatic selection
 
-The collector runs once, on the widget's timer, and reports every provider it
-can see. The bar then filters that list:
+The collector runs once per refresh and reports what each agent's own source
+says. The bar only draws the agents that pass:
 
-- **Claude** — appears when Claude Code has a plan or limits on this machine.
-  An expired sign-in still appears, with *Sign-in expired* in the panel and a
-  link-free hint to run `claude auth login`.
-- **Grok** — appears when Grok's local snapshot has a weekly reading.
+- **OpenRouter** — appears when a key is found in `OPENROUTER_API_KEY`, the
+  OpenCode `auth.json`, or OpenCode 2's credential store
+  (`opencode auth export`). Keys are never cached by the widget.
+- **OpenCode** — appears when the installed `opencode` answers with a Go
+  allowance.
+- **Grok** — appears when Grok's local billing snapshot has a weekly reading.
 - **Codex** — appears when Codex CLI is signed in to a plan with rate limits.
   An API-key sign-in has no plan limits and stays out of the bar.
-- **OpenCode** — appears when the installed OpenCode answers with a Go
-  allowance.
-- **OpenRouter** — appears when a key is found. Keys are read from
-  `OPENROUTER_API_KEY`, the OpenCode `auth.json`, or OpenCode 2's
-  `opencode auth export`; never from the widget's own cache.
+- **Claude** — appears when Claude Code has a plan or limits. An expired
+  sign-in still appears, labelled *Sign-in expired*, with the collector's hint
+  to run `claude auth login`.
 
-Each agent has a switch in its panel row. It defaults to on; flip it off and
-that agent stays in the panel (so you can read it or turn it back on) but
-leaves the bar. The switch writes the same `showClaude`/`showGrok`/
-`showOpencode`/`showOpenrouter` settings the widget exposes, so the two stay in
-step. In the panel, drag a row by its grip handle to reorder it; the same order
-is used for the icons in the bar and is saved with the widget. Dropping on the
-last row's lower half moves the agent to the end.
+An agent with no plan, no key and no usage is left out rather than shown as an
+empty shell. Detection is per machine: a plugin copied to another computer
+shows that computer's agents.
+
+## Order, switches and dragging
+
+- **Default order:** OpenRouter, OpenCode, Grok, Codex, Claude. A saved
+  `providerOrder` wins; agents missing from it are appended in the default
+  order, so a newly supported agent appears without a settings edit.
+- **Drag to reorder:** grab an agent row by the `⠿` grip and drop it where you
+  want it. A ghost follows the pointer, an accent line shows the insertion
+  point, and the bar icons follow immediately. Dropping on the last row's lower
+  half moves the agent to the end.
+- **Show switches:** every row has a switch, on by default. Turning one off
+  keeps the row — and its limits — in the panel so you can read it or switch it
+  back on, but removes its mark and meters from the bar. The hero reports how
+  many agents are hidden, and an all-hidden bar says so in its tooltip.
+- Both controls write the same widget settings the settings page exposes
+  (`providerOrder`, `show<Agent>`), so the panel and `shell.json` never drift.
+
+## Each agent in detail
+
+### OpenRouter
+
+OpenRouter has no subscription. The widget asks OpenRouter for the key's own
+budget with `GET https://openrouter.ai/api/v1/key`; the key is used only in an
+HTTPS `Authorization` header. Account credits come from
+`GET /api/v1/credits` when OpenRouter reports them.
+
+- **Limited key:** a meter of current cycle spend against the key's limit.
+- **No key limit:** the spend in dollars. Once one completed cycle has been
+  observed, the previous cycle's spend becomes the effective limit and a meter
+  appears. Going over it switches back to dollars and turns yellow.
+- **Zero spend:** only the mark is drawn; the popup still opens with the
+  zero-spend cycle, limit and reset details.
+- **Previous cycle:** exactly one current and one previous cycle are kept. A
+  previous cycle is used only when it was observed close to its reset, so a
+  partial or missed cycle cannot become a misleading baseline.
+- **Reset:** the key's own reset interval and date, monthly by default.
+
+### OpenCode
+
+The numbers come from the local OpenCode service — no second login, no key to
+paste:
+
+```bash
+opencode api GET /api/experimental/usage/limits
+```
+
+That endpoint reports the Go allowance and Console budgets of the workspace
+your installed OpenCode is signed in to. If the background service is not
+running, the collector retries once with `--standalone`, which starts a private
+server for that request and reads the same credentials.
+
+The widget shows the 5-hour session, weekly and monthly windows, any Console
+budgets, and today's prompts/tokens from the local OpenCode record. The
+endpoint is experimental, so a future OpenCode release may change its shape.
+
+### Grok
+
+There is no API key, no network request and no second login. The installed Grok
+CLI asks its background service for billing data when a session starts and
+writes the answer to:
+
+```text
+~/.grok/logs/unified.jsonl
+```
+
+The widget reads that snapshot and sums the numeric per-turn ledgers under
+`~/.grok/sessions/<workspace>/<session>/usage.json` for local activity.
+
+**Grok Bot** has a separate weekly allowance. Its desktop app caches the reading
+under `~/.config/Grok Bot/sand-client-persistence/*.blob`; the widget reads the
+newest small JSON blob for `percentUsed` and `nextResetMs`. Open Grok Bot to
+refresh that cache. The blob is read locally; no token or session cookie is
+touched. A Bot reading past its expiry is shown as stale with an em dash.
+
+Grok only updates its snapshot when a Grok session runs — also the only time
+your allowance can change — so run `grok` once (and open `/usage` if this is the
+first time) to create the first snapshot. The panel footer says how old the
+reading is.
+
+### Codex
+
+Codex limits come from the Codex app-server RPC (`account/rateLimits/read`)
+through Omarchy's Codex collector, which owns the OAuth refresh and its own
+cache. The widget reads the display-ready result:
+
+- the general **session** and **weekly** windows;
+- **code-review** windows when the account has them;
+- a **model's own allowance**, titled with its model (`o3 Weekly`), kept as a
+  separate row;
+- a Business seat's **spend cap** when that is what the app-server reports.
+
+An API-key sign-in has no plan limits and stays out of the bar. Run
+`codex login` to use a subscription plan.
+
+### Claude
+
+Claude uses `omarchy-agent-usage-claude`, the same collector as Omarchy's
+built-in Agents panel, so the widget inherits Anthropic's OAuth probe, its
+short-lived cache and its account selection:
+
+- **Session (5-hour)**
+- **Weekly (7-day)**
+- **Fable weekly** — the model-scoped allowance that only Fable spends
+  against, shown as its own bar and row.
+
+An expired sign-in keeps the agent in the bar with *Sign-in expired* and the
+collector's `claude auth login` hint. A machine with several Claude accounts
+uses the active account's numbers.
+
+## How it fetches
+
+One collector process feeds the whole widget. Each provider keeps its own
+source, and the collector normalizes them into the same shape:
+
+| Agent | Source |
+| --- | --- |
+| OpenRouter | `OPENROUTER_API_KEY`, OpenCode `auth.json`, or `opencode auth export`; then `/api/v1/key` and `/api/v1/credits` |
+| OpenCode | `opencode api GET /api/experimental/usage/limits` (retries `--standalone`) |
+| Grok | `scripts/grok.js` over `~/.grok`, plus the Grok Bot app cache; falls back to Omarchy's `grok.json` record |
+| Codex | `omarchy-agent-usage-codex --limits-only`, falling back to `~/.local/state/omarchy/agents/usage/codex.json` |
+| Claude | `omarchy-agent-usage-claude --limits-only`, falling back to `~/.local/state/omarchy/agents/usage/claude.json` |
+
+Schedule and caching:
+
+- Automatic refresh: `refreshIntervalSec`, default **5 minutes** (60–3600).
+- Manual refresh (middle click, `r`, IPC): at most once every **30 seconds**.
+- Failed reads back off from **1 minute up to 10 minutes**.
+- The last good result is cached at `~/.cache/agent-meters/usage.json` and
+  painted immediately on shell restart; the cache waits out the rest of the
+  refresh interval instead of re-reading.
+- One bar surface exists per monitor, but only an elected leader fetches; the
+  others consume the published result.
+- A failed provider keeps its last good numbers and gains an error. One
+  endpoint being down never blanks the other agents.
+
+Claude and Codex collectors are invoked from the login-shell PATH. Set
+`nodeCommand`, `codexCommand` or the other command paths if your shell needs an
+absolute path.
+
+## Colours and thresholds
+
+Each meter follows its own window:
+
+1. **Red / urgent** — at or above `criticalPercent` (default 90), or a window
+   the source marks as limited.
+2. **Orange** — at or above `warnPercent` (default 70).
+3. **Yellow** — OpenRouter only: the current cycle is over the previous
+   completed cycle.
+4. **Foreground** — everything else.
+
+`warningColor` and `criticalColor` override the theme; empty values keep the
+theme foreground and urgent colour. Agent marks are always the theme
+foreground.
 
 ## Install
 
-From the Omarchy plugin marketplace (once listed):
+Install it the standard Omarchy way:
 
 ```bash
-omarchy plugin add https://github.com/crueber/omarchy-plugin-agent-meters.git --enable
+omarchy plugin add https://github.com/crueber/omarchy-plugin-agent-meters --enable
 ```
 
-From a checkout:
+The command validates the manifest before installing and enables the widget in
+the right bar section.
+
+Or clone the repo and run the installer, which also places the widget in the
+right section:
 
 ```bash
 git clone https://github.com/crueber/omarchy-plugin-agent-meters.git
@@ -63,10 +251,162 @@ cd omarchy-plugin-agent-meters
 ```
 
 The installer copies the runtime files to
-`~/.config/omarchy/plugins/crueber.agent-meters/`, validates the manifest, and
-enables the widget in the right bar section.
+`~/.config/omarchy/plugins/crueber.agent-meters/`, validates the plugin, rescans
+the shell, and enables it. Pass a section as the first argument (`left`,
+`centerBegin`, `center`, `centerEnd`, `right`) or place it afterwards:
 
-To remove:
+```bash
+omarchy plugin enable crueber.agent-meters --section right --after nino.tailscale
+omarchy bar move crueber.agent-meters --section right --index 0
+```
+
+Saved changes to the plugin hot-reload. If the bar keeps showing an older
+build — most often after changing `Model.js` or a mark — restart the shell once
+with `omarchy restart shell`.
+
+### Requirements
+
+- Omarchy Quattro with the Omarchy shell bar and its Agents panel present.
+- Node.js for the collector (`node` on the login-shell PATH, or set
+  `nodeCommand`).
+- At least one of:
+  - an OpenRouter key (`OPENROUTER_API_KEY`, or signed in to OpenRouter through
+    OpenCode);
+  - OpenCode v2.x signed in to a workspace with a Go plan
+    (`opencode auth list`);
+  - Grok CLI with an existing login and at least one session;
+  - Codex CLI signed in to a subscription plan (`codex login`);
+  - Claude Code signed in (`omarchy agent account list claude`).
+
+No elevated privileges, no extra services and no daemon of its own.
+
+## Use
+
+- **Left click** — open or close the panel.
+- **Middle click** — refresh every agent now.
+- **Right click** — open this plugin's page, or run `onRightClick` if set.
+- **`r`** — refresh while the panel is open.
+- **Escape** — close the panel.
+- **Drag the `⠿` grip** — reorder agents.
+- **Switch** — show or hide an agent in the bar.
+
+IPC, useful for scripts and diagnostics:
+
+```bash
+omarchy-shell agent-meters text       # one line per visible agent
+omarchy-shell agent-meters providers  # visible providers as JSON
+omarchy-shell agent-meters refresh
+omarchy-shell agent-meters toggle
+omarchy-shell agent-meters move grok -1
+```
+
+## Settings
+
+Settings live inline on the widget's `shell.json` entry and are described in
+`manifest.json`. Change them from the widget settings UI or with:
+
+```bash
+omarchy bar set crueber.agent-meters refreshIntervalSec 600
+omarchy bar set crueber.agent-meters barStyle text
+omarchy bar set crueber.agent-meters showCodex false --json
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `barStyle` | `bars` | `bars`, `text` (short percentages per agent) or `icon` |
+| `showOpenrouter` | `true` | Show OpenRouter in the bar |
+| `showOpencode` | `true` | Show OpenCode in the bar |
+| `showGrok` | `true` | Show Grok in the bar |
+| `showCodex` | `true` | Show Codex in the bar |
+| `showClaude` | `true` | Show Claude in the bar |
+| `providerOrder` | `""` | Drag-and-drop order, comma-separated ids; empty uses OpenRouter, OpenCode, Grok, Codex, Claude |
+| `refreshIntervalSec` | `300` | Refresh interval (60–3600) |
+| `warnPercent` | `70` | Warning threshold |
+| `criticalPercent` | `90` | Critical threshold |
+| `warningColor` | `#f67400` | Empty keeps the theme foreground |
+| `criticalColor` | `""` | Empty uses the theme urgent colour |
+| `nodeCommand` | `""` | Optional path to `node` |
+| `authFile` | `""` | Optional OpenCode 1 auth file for the OpenRouter key |
+| `grokHome` | `""` | Optional Grok home; default `$GROK_HOME` or `~/.grok` |
+| `botHome` | `""` | Optional Grok Bot cache directory |
+| `opencodeCommand` | `""` | Optional path to `opencode` |
+| `codexCommand` | `""` | Optional path to `omarchy-agent-usage-codex` |
+| `showActivity` | `true` | Show the local-activity line per agent |
+| `onRightClick` | `""` | Optional shell command for right click |
+
+The per-agent switches in the panel are the same `show<Agent>` keys, written
+with `--json` so `shell.json` stores real booleans.
+
+## Privacy and security
+
+- **Keys are never cached, logged, printed or passed on a command line.** The
+  OpenRouter key is used only in an HTTPS `Authorization` header at request
+  time. It is read from `OPENROUTER_API_KEY`, OpenCode's credential file, or
+  `opencode auth export`.
+- **Local reads:** `~/.grok`, the Grok Bot app cache, OpenCode's local API,
+  OpenCode's credential export, and Omarchy's usage records. The Grok helper
+  never opens `~/.grok/auth.json`.
+- **Network reads by this plugin:** OpenRouter's `/api/v1/key` and
+  `/api/v1/credits` only. Claude's OAuth probe and Codex's app-server RPC are
+  performed by Omarchy's own collectors, under their caching and rate-limit
+  handling.
+- **Cache:** `~/.cache/agent-meters/usage.json` in a mode-`0700` directory. It
+  holds displayed numbers, reset times, the masked OpenRouter key label, and
+  the OpenRouter cycle baseline. No prompts, responses, session text, tokens or
+  account identity. Delete it at any time.
+- **Untrusted text:** every string from a file or network is neutralised before
+  display, percentages are clamped to 0–100, and response sizes are bounded.
+- The plugin writes nothing outside
+  `~/.config/omarchy/plugins/crueber.agent-meters/` and
+  `~/.cache/agent-meters/`; bar layout and settings live in `shell.json`,
+  managed by Omarchy.
+
+See `SECURITY.md` for reporting and the full data-flow notes.
+
+## Troubleshooting
+
+**No agents in the bar.** Run `omarchy-shell agent-meters text`. If it prints
+`no agents`, none of the five sources is configured on this machine. The
+panel's empty state names the sign-in paths. If it lists agents but the bar is
+empty, check the show switches — the hero reports hidden agents.
+
+**An agent should appear but does not.**
+
+| Agent | Check |
+| --- | --- |
+| OpenRouter | `opencode auth export` contains an `openrouter` credential, or `OPENROUTER_API_KEY` is set; then `omarchy-shell agent-meters refresh` |
+| OpenCode | `opencode auth list`; `opencode api GET /api/experimental/usage/limits` answers |
+| Grok | `~/.grok/logs/unified.jsonl` exists; run `grok` once and open `/usage` |
+| Codex | `codex login`; an API-key sign-in intentionally has no plan limits |
+| Claude | `omarchy agent account list claude`; run `claude auth login` if expired |
+
+**Claude says "Sign-in expired".** Run `claude auth login` (or start Claude
+Code) and refresh. The agent stays visible so the meters return as soon as the
+sign-in is fixed.
+
+**Grok Bot shows an em dash or "stale reading".** Its cached reading has
+expired. Open the Grok Bot desktop app to refresh it.
+
+**OpenCode did not answer.** The endpoint is experimental. Confirm the CLI
+works with `opencode api GET /api/experimental/usage/limits`; the collector
+also retries once with `--standalone`.
+
+**OpenRouter says "no OpenRouter key found".** Set `OPENROUTER_API_KEY`, sign
+in to OpenRouter in OpenCode (`opencode auth login`), or point `authFile` at an
+OpenCode 1 credential file. OpenCode 2 users need no extra step: the collector
+reads `opencode auth export`.
+
+**"node not found; set the Node executable".** Set `nodeCommand` to the absolute
+path of `node`.
+
+**Numbers look old.** Open the panel or run
+`omarchy-shell agent-meters refresh`; check `showActivity` and the footer's
+"Updated …". Failed checks back off up to 10 minutes.
+
+**The bar still shows an older build after an update.** Restart the shell once:
+`omarchy restart shell`.
+
+## Remove
 
 ```bash
 omarchy plugin disable crueber.agent-meters
@@ -74,58 +414,81 @@ omarchy plugin remove crueber.agent-meters --yes
 rm -rf ~/.cache/agent-meters
 ```
 
-## Requirements
+The `rm` is optional — it only discards the cached numbers so they do not linger
+on disk. A clone of the repository can be deleted as well. The plugin writes
+nothing else.
 
-- Omarchy Quattro with the Omarchy shell bar
-- Node.js for the collector
-- At least one of:
-  - Claude Code signed in (`omarchy agent account list claude` shows it)
-  - Codex CLI signed in to a plan (`codex login`)
-  - Grok used once, so `~/.grok/logs/unified.jsonl` exists
-  - OpenCode signed in with a Go plan
-  - An OpenRouter key in `OPENROUTER_API_KEY` or OpenCode
+## Predecessors
 
-Claude and Codex readings use `omarchy-agent-usage-claude` and
-`omarchy-agent-usage-codex`, the same collectors the built-in Agents panel
-uses; they own the OAuth refresh, caching, account selection and Codex's
-app-server RPC. If a command is unavailable, the widget falls back to the last
-record in `~/.local/state/omarchy/agents/usage/`.
+Agent Meters is the unified version of three plugins that remain available on
+their own:
 
-## Settings
+| Predecessor | What it contributes |
+| --- | --- |
+| [OpenRouter Usage](https://github.com/crueber/omarchy-plugin-openrouter-usage) | Key-limit and dollar modes, previous-cycle comparison, account credits, OpenCode credential handling |
+| [OpenCode Go Usage](https://github.com/crueber/omarchy-plugin-opencode-usage) | Session/weekly/monthly Go meters, Console budgets, local activity, standalone retry |
+| [Grok Usage](https://github.com/crueber/omarchy-plugin-grok-usage) | Weekly plan meter, Grok Bot's separate allowance, local session ledgers, snapshot age |
 
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `barStyle` | `bars` | `bars`, `text` (highest percentage) or `icon` |
-| `showClaude` / `showCodex` / `showGrok` / `showOpencode` / `showOpenrouter` | `true` | Show that agent in the bar; the panel switch flips the same keys |
-| `providerOrder` | `""` | Saved by the panel's drag-and-drop order; comma-separated agent ids. Empty uses OpenRouter, OpenCode, Grok, Codex, Claude |
-| `refreshIntervalSec` | `300` | How often to collect (60–3600) |
-| `warnPercent` | `70` | Warning colour threshold |
-| `criticalPercent` | `90` | Urgent colour threshold |
-| `warningColor` | `#f67400` | Empty keeps the theme foreground |
-| `criticalColor` | `""` | Empty uses the theme urgent colour |
-| `nodeCommand` | `""` | Optional path to `node` |
-| `authFile` | `""` | Optional OpenCode 1 auth file for the OpenRouter key |
-| `grokHome` | `""` | Optional Grok home (`~/.grok`) |
-| `botHome` | `""` | Optional Grok Bot cache directory |
-| `opencodeCommand` | `""` | Optional path to `opencode` |
-| `codexCommand` | `""` | Optional path to `omarchy-agent-usage-codex` |
-| `showActivity` | `true` | Today's prompts/tokens per agent in the panel |
-| `onRightClick` | `""` | Optional shell command |
+The unified widget adds Codex and Claude, one panel instead of three popups,
+automatic detection, per-agent switches and drag-to-reorder. In exchange it
+shows one compact activity line per agent instead of the individual plugins'
+longer 30-day and billing sections — install a predecessor if you want that
+deeper local detail for a single agent.
 
-## Privacy and safety
+## Development
 
-- API keys are read at request time and used only in an HTTPS `Authorization`
-  header. They are never put in the cache, the settings, a command line or an
-  error message.
-- The cache at `~/.cache/agent-meters/usage.json` holds only displayed
-  numbers, masked labels and the OpenRouter cycle baseline.
-- Local reads: `~/.grok`, `~/.local/state/omarchy/agents/usage`, OpenCode's
-  local API, and OpenCode's credential export. Network reads: OpenRouter's
-  `/api/v1/key` and `/api/v1/credits`. Claude's OAuth probe and Codex's
-  app-server RPC run inside Omarchy's own collectors.
-- All downloaded and file-provided text is neutralised before display, and
-  the meters bound every percentage to 0–100.
+The repository is the source of truth; the live plugin is
+`~/.config/omarchy/plugins/crueber.agent-meters/` and should be updated with
+`./scripts/install.sh` rather than edited in place. `AGENTS.md` documents the
+architecture and invariants for anyone — human or agent — changing the plugin.
+
+```bash
+./scripts/validate.sh     # manifest, required files, offline tests, plugin validate
+node scripts/test-model.js
+node scripts/test-collect.js
+./scripts/install.sh
+```
+
+The tests are offline: `test-model.js` covers parsing, window/state math,
+OpenRouter cycle history, ordering, switches and cache round-trips;
+`test-collect.js` drives the collector with fake `opencode`, `claude` and
+`codex` binaries and a temporary HOME, so CI needs no real account.
+
+Layout:
+
+```text
+manifest.json          plugin id, bar-widget entry point, settings schema
+Panel.qml              bar chips, unified panel, fetch/cache lifecycle
+ProviderMark.qml       resolves and themes marks/<Provider>Mark.qml
+Model.js               pure parsing, windows, state, cache, poll coordination
+marks/                 monochrome vector marks (OpenRouter, OpenCode, Grok, Codex, Claude)
+scripts/collect.js     one collector, five provider sources
+scripts/grok.js        Grok log/session/Bot reader
+scripts/install.sh     deploy to the live plugin directory
+scripts/validate.sh    manifest + files + tests + omarchy plugin validate
+```
+
+## Marketplace facts
+
+- **Plugin id:** `crueber.agent-meters`
+- **Name:** Agent Meters
+- **Version:** 1.1.1
+- **Kind:** `bar-widget` (`Panel.qml`)
+- **Category:** AI
+- **Aliases:** `agent-meters`, `agents`, `ai-agents`, `openrouter`, `opencode`,
+  `grok`, `codex`, `claude`
+- **Default section:** `right`
+- **IPC target:** `agent-meters`
+- **Licence:** MIT
+- **Source:** https://github.com/crueber/omarchy-plugin-agent-meters
+- **Preview:** `preview.png` (panel) and `screenshots/bar.png`
+- **Validation:** `./scripts/validate.sh` and `omarchy plugin validate`
+- **Install / remove:** standard `omarchy plugin add` / `omarchy plugin remove`
 
 ## Licence
 
-MIT
+MIT. Claude and Anthropic are trademarks of Anthropic; Codex and OpenAI are
+trademarks of OpenAI; Grok and xAI are trademarks of their respective owner;
+OpenCode and OpenRouter are trademarks of their respective owners. The marks
+in this repository are traced monochrome geometry used only to identify the
+service each meter belongs to.

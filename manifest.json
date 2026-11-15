@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "crueber.agent-meters",
   "name": "Agent Meters",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": "Chris Rueber",
   "license": "MIT",
   "homepage": "https://github.com/crueber/omarchy-plugin-agent-meters",
@@ -62,7 +62,7 @@
           "icon"
         ],
         "defaultValue": "bars",
-        "description": "bars: each mark with one meter per limit window; text: the highest percentage per agent; icon: just the marks."
+        "description": "bars: each mark with one meter per limit window; text: short percentages instead of meters; icon: just the marks."
       },
       {
         "key": "showClaude",
@@ -202,7 +202,7 @@
         "type": "string",
         "label": "Right-click command",
         "defaultValue": "",
-        "description": "Optional shell command; empty opens the Omarchy Agents documentation."
+        "description": "Optional shell command; empty opens this plugin's page."
       }
     ]
   }

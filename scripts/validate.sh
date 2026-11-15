@@ -19,7 +19,7 @@ jq -e '
   and (.barWidget.schema | type == "array")
 ' manifest.json >/dev/null
 
-for file in Panel.qml ProviderMark.qml Model.js README.md LICENSE \
+for file in Panel.qml ProviderMark.qml Model.js README.md SECURITY.md LICENSE \
   marks/ClaudeMark.qml marks/CodexMark.qml marks/GrokMark.qml \
   marks/OpencodeMark.qml marks/OpenRouterMark.qml \
   scripts/collect.js scripts/grok.js; do
