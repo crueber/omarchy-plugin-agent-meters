@@ -9,6 +9,12 @@
 - README rewritten as the full user guide, with predecessor links,
   troubleshooting and marketplace facts; SECURITY.md added.
 - `claudeCommand` setting for an absolute path to the Claude collector.
+- The OpenRouter key label is reduced to a three-character tail (`key …2eb`),
+  including in the cache and screenshots; the API's masked prefix is no longer
+  displayed.
+- The panel can grow to fit four agents without scrolling on a normal screen.
+- Preview is one unified image: the bar meters above the panel, in the style
+  of the three predecessor plugins.
 
 ## 1.1.0 — 2026-11-15
 

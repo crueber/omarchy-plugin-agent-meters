@@ -569,6 +569,14 @@ function getJson(url, key) {
   })
 }
 
+// Never carry an OpenRouter key's label into the UI beyond a short tail; the
+// API masks it, but even the surviving prefix is more than a screenshot needs.
+function maskKeyLabel(value) {
+  const raw = String(value || '').trim()
+  const match = raw.match(/[A-Za-z0-9]{3,}$/)
+  return match ? 'key \u2026' + match[0].slice(-3) : 'OpenRouter key'
+}
+
 function pickMoney(doc) {
   const source = doc && doc.data && typeof doc.data === 'object' ? doc.data : doc
   if (!source || typeof source !== 'object') return null
@@ -582,7 +590,7 @@ function pickMoney(doc) {
     else spend = number(source.usage_monthly) !== null ? number(source.usage_monthly) : number(source.usage)
   }
   return {
-    label: plain(source.label, 80),
+    label: maskKeyLabel(source.label),
     limit: limit,
     spend: spend === null ? 0 : spend,
     resetInterval: String((eb && eb.reset_interval) || source.limit_reset || 'monthly'),

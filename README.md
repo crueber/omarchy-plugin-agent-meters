@@ -5,9 +5,7 @@ One Omarchy bar widget for every AI agent this machine actually uses.
 their own limit meters; an agent you have no plan, key or usage for simply
 stays out of the bar. That is also the default bar order.
 
-![Agent Meters panel](preview.png)
-
-![Agent Meters in the Omarchy bar](screenshots/bar.png)
+![Agent Meters in the Omarchy bar and its panel](preview.png)
 
 Agent Meters is the unified successor to three separate widgets — [OpenRouter
 Usage](#predecessors), [OpenCode Go Usage](#predecessors) and [Grok
