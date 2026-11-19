@@ -42,7 +42,9 @@ function script(name, body) {
   return file
 }
 
+const inheritLog = path.join(tmp, 'inherited.log')
 const opencode = script('opencode', `
+printf '%s\\n' "\${OPENROUTER_MANAGEMENT_KEY:-unset}" >> "${inheritLog}"
 if [ "$1" = "api" ]; then
   cat <<'JSON'
 {"data":{"workspace":{"id":"w1","name":"work"},"go":{"rolling":{"percent":10,"limited":false,"resetsAt":1000},"weekly":{"percent":20,"limited":false,"resetsAt":2000},"monthly":{"percent":30,"limited":false,"resetsAt":3000}},"budgets":[{"id":"console","limit":10,"spent":2.5,"resetsAt":4000}]}}
@@ -107,6 +109,7 @@ function run(options) {
   fs.writeFileSync(routesFile, JSON.stringify(opts.routes || {}))
   fs.writeFileSync(logFile, '')
   fs.writeFileSync(secretLog, '')
+  fs.writeFileSync(inheritLog, '')
   const env = Object.assign({}, baseEnv, opts.env || {}, {
     STUB_ROUTES: routesFile,
     STUB_LOG: logFile,
@@ -267,6 +270,9 @@ try {
     assert.deepStrictEqual(urls(r), [KEYS0, CREDITS, META, QUERY], 'keys, credits, analytics; never /key')
     assert.ok(r.calls.every(function(call) { return call.authorization === 'Bearer ' + MGMT }), 'trimmed management key, header only')
     assert.deepStrictEqual(r.secretCalls, [], 'the Secret Service is not asked when the variable is set')
+    const inherited = fs.readFileSync(inheritLog, 'utf8').split('\n').filter(Boolean)
+    assert.ok(inherited.length > 0 && inherited.every(function(line) { return line === 'unset' }),
+      'child programs never inherit OPENROUTER_MANAGEMENT_KEY')
     const p = r.or
     assert.strictEqual(p.available, true)
     assert.strictEqual(p.error, '')

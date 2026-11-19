@@ -485,4 +485,15 @@ test('per-key mode keeps its caption and money line', function() {
   assert.strictEqual(M.barDollarsColor(report, history, 70, 90, {}), 'yellow')
 })
 
+test('only a fresh, error-free OpenRouter read advances the history', function() {
+  const good = provider({ id: 'openrouter', money: { scope: 'account', label: 'All keys', spend: 5, resetsAt: dec1 } })
+  const failed = provider({ id: 'openrouter', error: 'HTTP 401', money: { scope: 'account', label: 'All keys', spend: 60, resetsAt: nov1 } })
+  assert.strictEqual(M.historyMoney([good]).spend, 5)
+  assert.strictEqual(M.historyMoney([failed]), null)
+  assert.strictEqual(M.historyMoney([provider({ id: 'claude' })]), null)
+  const h = accountHistory([{ end: nov1, spend: 60 }])
+  assert.strictEqual(JSON.stringify(M.advanceHistory(h, M.historyMoney([failed]), dec1 + 86400000)), JSON.stringify(h),
+    'a failed read past the 1st leaves the history alone')
+})
+
 process.stdout.write('all model tests passed\n')
