@@ -17,6 +17,10 @@ Omarchy marketplace, and review changes like any other shell plugin.
 
 - `OPENROUTER_API_KEY`, the OpenCode credential file (`auth.json`), or the
   output of `opencode auth export`.
+- An OpenRouter **management key**, from `OPENROUTER_MANAGEMENT_KEY`, the
+  Secret Service (`secret-tool lookup service agent-meters account
+  openrouter-management`), or
+  `${XDG_DATA_HOME:-~/.local/share}/agent-meters/openrouter-management-key`.
 - OpenCode's local API through the `opencode` CLI.
 - `~/.grok` billing logs and per-turn session ledgers, and the Grok Bot app's
   small cached JSON blob. `~/.grok/auth.json` is never opened.
@@ -29,12 +33,20 @@ into the widget's cache or displayed.
 
 ## Network access
 
-This plugin makes exactly two kinds of request of its own:
+This plugin talks only to `https://openrouter.ai` (the host is fixed in the
+code, not configurable):
 
-- `GET https://openrouter.ai/api/v1/key`
-- `GET https://openrouter.ai/api/v1/credits` (optional)
+- per-key mode: `GET /api/v1/key` and `GET /api/v1/credits` (optional);
+- with a management key: `GET /api/v1/keys?offset=N` (at most 10 pages),
+  `GET /api/v1/credits`, and for the usage meter's baseline
+  `GET /api/v1/analytics/meta` and `POST /api/v1/analytics/query` — the latter
+  two at most once per month and averaging window for a good answer, at most
+  once a day after a failed one, and never when `openrouterAverageMonths` is 0.
 
-Both use the key only in an HTTPS `Authorization` header. Claude's OAuth usage
+Every request carries the key only in an HTTPS `Authorization` header, has a
+15-second timeout inside an overall 45-second budget, and its response is
+capped at 1 MB; request bodies are capped at 4 KB and built only from a
+validated metric name and dates. Claude's OAuth usage
 probe and Codex's app-server RPC are made by Omarchy's own collectors, with
 their caching and rate-limit handling; the plugin only runs those commands.
 
@@ -46,14 +58,76 @@ There is no telemetry and no analytics.
   `shell.json`, or passed on a command line.
 - The OpenRouter key is re-read at request time and dropped after the request.
 - The cache at `~/.cache/agent-meters/usage.json` contains displayed numbers,
-  reset times, the masked OpenRouter key label, and the OpenRouter cycle
-  baseline. It is created in a mode-`0700` directory.
+  reset times, the masked OpenRouter key label, the OpenRouter cycle history
+  and analytics average, and — with a management key — each listed key's name,
+  monthly spend and limit. It is created in a mode-`0700` directory.
+
+### The OpenRouter management key
+
+A management key can create and delete the account's API keys, so it gets the
+strictest handling in the plugin.
+
+**Storage, in the order the collector looks:**
+
+1. `OPENROUTER_MANAGEMENT_KEY` in the collector's environment. The collector
+   copies it once at start-up and deletes it from its own environment before
+   it starts any other program (`opencode`, `secret-tool`, the Omarchy
+   collectors, `grok.js`), so no child inherits it.
+2. The freedesktop Secret Service (gnome-keyring on Omarchy), item
+   `service=agent-meters account=openrouter-management`, read with
+   `secret-tool lookup` (only those attributes are on its command line; the
+   secret comes back on stdout; 3-second timeout, stderr discarded — the same
+   pattern Omarchy's own `omarchy-agent-usage-agy` uses).
+3. `${XDG_DATA_HOME:-~/.local/share}/agent-meters/openrouter-management-key`.
+   The directory is checked with `lstat` (a real directory, owned by you, mode
+   `0700`); the file is opened with `O_NOFOLLOW | O_NONBLOCK` and checked
+   through the open descriptor (a regular file, owned by you, no group or other
+   permission bits, at most 4 KB). Anything else is refused with an error and
+   no other key is tried. The file sits under `~/.local/share` rather than
+   `~/.config` because Omarchy treats `~/.config` as user configuration that
+   people version and sync as dotfiles, and its own plans keep delete-capable
+   credentials out of it.
+
+Omarchy's default keyring is created **without a password**
+(`install/user/default-keyring.sh`), so on a stock install neither option
+encrypts the key at rest beyond full-disk encryption; both are readable by
+processes running as you, which is the plugin's trust boundary anyway.
+
+**Writing it.** `scripts/set-management-key.sh` reads the key from the
+terminal with echo off (or from a pipe), never from its arguments (it refuses
+any unknown argument without echoing it), validates its shape, and passes it
+to `secret-tool store` on stdin through a shell builtin, so it never appears
+in any process's argv (`/proc/<pid>/cmdline` is world-readable). With
+`--file`, or when no Secret Service answers, it writes the file through a
+`0600` temporary file in the `0700` directory and renames it into place. It
+removes the copy in the other location so only one remains. `--remove`
+deletes both. There is deliberately no text field for the key in the panel or
+the settings page: QML text fields and widget settings flow into `shell.json`
+and the shell's memory.
+
+**Use.** The key is sent only to `https://openrouter.ai` in the
+`Authorization: Bearer` header. Error messages from the network or from
+OpenRouter are scrubbed of the key (and of anything shaped like an
+`sk-or-…` key or a `Bearer` value) before they reach the output.
+
+**Never stored or shown:** not in `shell.json`, widget settings or manifest
+defaults; not in the cache; not in the collector's JSON output, the logs or
+stderr; not in `omarchy-shell agent-meters text|providers`; not on any
+command line. The output and the panel only say where the key came from
+(`env`, `Secret Service` or `file`). A failing management key keeps the last
+good account-wide numbers with its error and never silently falls back to the
+inference key.
 
 ## Text and inputs
 
 All strings that come from a file or a network response are neutralised before
-display, percentages are clamped to 0–100, collection sizes are bounded, and
-HTTP responses are size- and time-limited. Plugin settings are read through
+display, percentages are clamped to 0–100, collection sizes are bounded (at
+most 1,000 listed keys and 12 key rows), and HTTP responses are size- and
+time-limited. OpenRouter analytics answers are parsed strictly: an unexpected
+row count, a negative or non-numeric figure, a date outside the asked range or
+a truncated answer all mean "no baseline". The analytics baseline the widget
+passes back to the collector on its command line is display data only
+(month, months, average, time checked) and is validated by a strict pattern. Plugin settings are read through
 Omarchy's widget API and never interpolated into a shell command without
 quoting.
 
