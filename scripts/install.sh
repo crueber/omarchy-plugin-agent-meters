@@ -24,6 +24,7 @@ for file in "$repo_dir"/marks/*.qml; do
 done
 install -m 0755 "$repo_dir/scripts/collect.js" "$dest/scripts/collect.js"
 install -m 0755 "$repo_dir/scripts/grok.js" "$dest/scripts/grok.js"
+install -m 0755 "$repo_dir/scripts/set-management-key.sh" "$dest/scripts/set-management-key.sh"
 
 omarchy plugin validate "$dest"
 omarchy-shell -q shell rescanPlugins || true

@@ -22,7 +22,7 @@ jq -e '
 for file in Panel.qml ProviderMark.qml Model.js README.md SECURITY.md LICENSE \
   marks/ClaudeMark.qml marks/CodexMark.qml marks/GrokMark.qml \
   marks/OpencodeMark.qml marks/OpenRouterMark.qml \
-  scripts/collect.js scripts/grok.js; do
+  scripts/collect.js scripts/grok.js scripts/set-management-key.sh; do
   test -f "$file" || {
     echo "missing required file: $file" >&2
     exit 1
@@ -31,6 +31,7 @@ done
 
 node --check scripts/collect.js
 node --check scripts/grok.js
+bash -n scripts/set-management-key.sh
 node scripts/test-model.js >/dev/null
 node scripts/test-collect.js >/dev/null
 

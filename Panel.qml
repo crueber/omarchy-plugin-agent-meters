@@ -46,6 +46,11 @@ Panel {
   readonly property string claudeCommand: String(setting("claudeCommand", ""))
   readonly property bool showActivity: setting("showActivity", true) !== false
   readonly property string rightClickCommand: String(setting("onRightClick", ""))
+  // OpenRouter account-wide (management key) display: key rows in the panel
+  // and the months the usage meter averages (0 = no meter, no analytics).
+  readonly property int openrouterKeyRows: Model.clampInt(setting("openrouterKeyRows", 3), 0, 12, 3)
+  readonly property int openrouterAverageMonths: Model.clampInt(setting("openrouterAverageMonths", 2), 0, 12, 2)
+  readonly property var orOptions: ({ keyRows: openrouterKeyRows, averageMonths: openrouterAverageMonths })
   property var visibility: ({
     claude: setting("showClaude", true) !== false,
     grok: setting("showGrok", true) !== false,
@@ -107,7 +112,7 @@ Panel {
   readonly property string heroDetail: {
     var top = null
     for (var i = 0; i < visibleProviders.length; i++) {
-      var list = Model.windowsFor(visibleProviders[i], history, warnPercent, criticalPercent)
+      var list = Model.windowsFor(visibleProviders[i], history, warnPercent, criticalPercent, orOptions)
       for (var j = 0; j < list.length; j++) {
         if (list[j].mode !== "meter") continue
         if (top === null || list[j].percent > top) top = list[j].percent
@@ -133,7 +138,7 @@ Panel {
     return parts.join(" · ")
   }
   readonly property string tooltipText: visibleProviders.length > 0
-    ? Model.tooltip(visibleProviders, history, nowMs, warnPercent, criticalPercent)
+    ? Model.tooltip(visibleProviders, history, nowMs, warnPercent, criticalPercent, orOptions)
     : (panelProviders.length > 0
       ? "All agents are hidden from the bar\nOpen Agent Meters to show one"
       : "No AI agents found")
@@ -297,8 +302,10 @@ Panel {
           available: old.available,
           tier: next.tier !== "" ? next.tier : old.tier,
           status: next.status !== "" ? next.status : old.status,
+          hint: next.hint,
           error: next.error,
           source: old.source,
+          keySource: next.keySource,
           limits: old.limits,
           activity: old.activity,
           money: old.money,
@@ -364,6 +371,12 @@ Panel {
     if (root.opencodeCommand !== "") command += " --opencode " + Model.shellQuote(root.opencodeCommand)
     if (root.codexCommand !== "") command += " --codex " + Model.shellQuote(root.codexCommand)
     if (root.claudeCommand !== "") command += " --claude " + Model.shellQuote(root.claudeCommand)
+    // Only non-secret display state goes on the command line: the averaging
+    // window, and the analytics baseline this cache already holds, so the
+    // collector asks OpenRouter's analytics at most once per (month, N).
+    command += " --openrouter-average-months " + Model.shellQuote(String(root.openrouterAverageMonths))
+    var baseline = Model.baselineArg(findProvider(root.providers, "openrouter"))
+    if (baseline !== "") command += " --openrouter-baseline " + Model.shellQuote(baseline)
     return command
   }
 
@@ -420,6 +433,13 @@ Panel {
     Model.pollPublish(root, { fetchedAt: root.lastFetchMs, providers: root.providers, history: root.history })
     writeCache()
     scheduleNextPoll(nextAutoDelayMs())
+  }
+
+  // A new averaging window needs a new analytics baseline. Ask through the
+  // normal path, so leadership and the fetch floors still apply; the panel
+  // already redraws from the observed history meanwhile.
+  onOpenrouterAverageMonthsChanged: {
+    if (root.pollLeader && root.cacheLoadAttempted) root.requestFetch("auto")
   }
 
   // --------------------------------------------------------------- lifecycle
@@ -569,7 +589,7 @@ Panel {
       var parts = []
       for (var i = 0; i < root.visibleProviders.length; i++) {
         var provider = root.visibleProviders[i]
-        parts.push(provider.name + ": " + Model.compactText(provider, root.history, root.warnPercent, root.criticalPercent))
+        parts.push(provider.name + ": " + Model.compactText(provider, root.history, root.warnPercent, root.criticalPercent, root.orOptions))
       }
       return parts.length > 0 ? parts.join(" | ") : "no agents"
     }
@@ -625,7 +645,7 @@ Panel {
 
       Repeater {
         model: root.barStyle === "bars" && chip.provider
-          ? Model.barWindows(chip.provider, root.history, root.warnPercent, root.criticalPercent)
+          ? Model.barWindows(chip.provider, root.history, root.warnPercent, root.criticalPercent, root.orOptions)
           : []
 
         delegate: Item {
@@ -642,7 +662,7 @@ Panel {
           }
 
           Rectangle {
-            width: Math.max(height, parent.width * modelData.percent / 100)
+            width: Math.max(height, parent.width * Math.min(100, Math.max(0, modelData.fillPercent)) / 100)
             height: parent.height
             radius: height / 2
             color: root.stateColor(modelData.color)
@@ -659,15 +679,12 @@ Panel {
       textFormat: Text.PlainText
       anchors.verticalCenter: parent.verticalCenter
       visible: root.barStyle === "bars" && chip.provider && chip.provider.id === "openrouter"
-      text: {
-        var windows = chip.provider ? Model.windowsFor(chip.provider, root.history, root.warnPercent, root.criticalPercent) : []
-        if (windows.length === 0 || windows[0].mode !== "dollars") return ""
-        return Model.formatCurrency(windows[0].spend)
-      }
-      color: {
-        var windows = chip.provider ? Model.windowsFor(chip.provider, root.history, root.warnPercent, root.criticalPercent) : []
-        return windows.length > 0 ? root.stateColor(windows[0].color) : root.foreground
-      }
+      text: chip.provider
+        ? Model.barDollarsText(chip.provider, root.history, root.warnPercent, root.criticalPercent, root.orOptions)
+        : ""
+      color: chip.provider
+        ? root.stateColor(Model.barDollarsColor(chip.provider, root.history, root.warnPercent, root.criticalPercent, root.orOptions))
+        : root.foreground
       font.family: root.fontFamily
       font.pixelSize: Style.font.bodySmall
       renderType: Text.NativeRendering
@@ -677,9 +694,9 @@ Panel {
       textFormat: Text.PlainText
       anchors.verticalCenter: parent.verticalCenter
       visible: root.barStyle === "text"
-      text: chip.provider ? Model.compactText(chip.provider, root.history, root.warnPercent, root.criticalPercent) : ""
+      text: chip.provider ? Model.barText(chip.provider, root.history, root.warnPercent, root.criticalPercent, root.orOptions) : ""
       color: {
-        var color = chip.provider ? Model.providerColor(chip.provider, root.history, root.warnPercent, root.criticalPercent) : "normal"
+        var color = chip.provider ? Model.providerColor(chip.provider, root.history, root.warnPercent, root.criticalPercent, root.orOptions) : "normal"
         return root.stateColor(color)
       }
       font.family: root.fontFamily
@@ -697,7 +714,7 @@ Panel {
     dimmed: !root.hasData
     active: {
       for (var i = 0; i < root.visibleProviders.length; i++) {
-        if (Model.isAlarming(root.visibleProviders[i], root.history, root.warnPercent, root.criticalPercent)) return true
+        if (Model.isAlarming(root.visibleProviders[i], root.history, root.warnPercent, root.criticalPercent, root.orOptions)) return true
       }
       return false
     }
@@ -926,7 +943,7 @@ Panel {
 
     function sectionWindows() {
       return section.provider
-        ? Model.windowsFor(section.provider, root.history, root.warnPercent, root.criticalPercent)
+        ? Model.windowsFor(section.provider, root.history, root.warnPercent, root.criticalPercent, root.orOptions)
         : []
     }
 
@@ -1013,7 +1030,7 @@ Panel {
         id: sectionValue
         textFormat: Text.PlainText
         visible: sectionSummary() !== null && sectionSummary().mode === "meter"
-        text: sectionSummary() ? Model.percentText(sectionSummary().percent) : ""
+        text: sectionSummary() ? Model.windowValueText(sectionSummary()) : ""
         color: sectionSummary() ? root.stateColor(sectionSummary().color) : root.foreground
         font.family: root.fontFamily
         font.pixelSize: Style.font.body
@@ -1100,9 +1117,7 @@ Panel {
               textFormat: Text.PlainText
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
-              text: modelData.mode === "dollars"
-                ? Model.formatCurrency(modelData.spend)
-                : (modelData.stale ? "—" : Model.percentText(modelData.percent))
+              text: Model.windowValueText(modelData)
               color: root.stateColor(modelData.color)
               font.family: root.fontFamily
               font.pixelSize: Style.font.body
@@ -1112,7 +1127,7 @@ Panel {
 
           MeterBar {
             visible: modelData.mode === "meter"
-            percent: modelData.percent
+            percent: modelData.fillPercent
             fill: root.stateColor(modelData.color)
           }
 
@@ -1120,17 +1135,7 @@ Panel {
             textFormat: Text.PlainText
             width: parent.width
             visible: text !== ""
-            text: {
-              var parts = []
-              if (modelData.mode === "meter" && modelData.effectiveLimit) {
-                parts.push(Model.formatCurrency(modelData.spend) + " of " + Model.formatCurrency(modelData.effectiveLimit))
-              }
-              var reset = Model.resetText(modelData.resetsAt, root.nowMs)
-              if (reset !== "") parts.push(reset)
-              if (modelData.stale) parts.push("stale reading")
-              if (modelData.over) parts.push("over the previous cycle")
-              return parts.join(" · ")
-            }
+            text: Model.windowCaption(modelData, root.nowMs)
             color: modelData.over ? root.stateColor("yellow") : root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -1142,21 +1147,14 @@ Panel {
 
     Row {
       width: parent.width
-      visible: section.provider !== null && section.provider.money !== null
+      visible: section.provider !== null && section.provider.money !== null && moneyText.text !== ""
       spacing: Style.space(8)
 
       Text {
+        id: moneyText
         textFormat: Text.PlainText
         width: parent.width
-        text: {
-          if (!section.provider || !section.provider.money) return ""
-          var money = section.provider.money
-          var parts = []
-          if (money.credits) parts.push(Model.formatCurrency(money.credits.remaining) + " credits left")
-          if (money.limit !== null) parts.push(Model.formatCurrency(money.limit) + " " + Model.intervalName(money.resetInterval).toLowerCase() + " limit")
-          else parts.push("No key limit")
-          return parts.join(" · ")
-        }
+        text: section.provider ? Model.moneySummary(section.provider.money) : ""
         color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
@@ -1229,6 +1227,29 @@ Panel {
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       wrapMode: Text.WordWrap
+    }
+
+    // Where the OpenRouter management key comes from, never the key. There is
+    // deliberately no field to type one in: scripts/set-management-key.sh
+    // stores it outside the shell's settings.
+    Text {
+      textFormat: Text.PlainText
+      width: parent.width
+      visible: text !== ""
+      text: Model.managementKeyText(section.provider)
+      color: root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+      font.underline: keyHelpArea.containsMouse
+      wrapMode: Text.WordWrap
+
+      MouseArea {
+        id: keyHelpArea
+        anchors.fill: parent
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: Qt.openUrlExternally("https://github.com/crueber/omarchy-plugin-agent-meters#openrouter-management-key")
+      }
     }
   }
 }
