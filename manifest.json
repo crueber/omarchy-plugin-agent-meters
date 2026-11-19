@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "crueber.agent-meters",
   "name": "Agent Meters",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "author": "Chris Rueber",
   "license": "MIT",
   "homepage": "https://github.com/crueber/omarchy-plugin-agent-meters",
@@ -50,7 +50,9 @@
       "providerOrder": "",
       "showCodex": true,
       "codexCommand": "",
-      "claudeCommand": ""
+      "claudeCommand": "",
+      "openrouterKeyRows": 3,
+      "openrouterAverageMonths": 2
     },
     "schema": [
       {
@@ -89,7 +91,7 @@
         "type": "boolean",
         "label": "Show OpenRouter when keyed",
         "defaultValue": true,
-        "description": "OpenRouter appears when a key is found in OPENROUTER_API_KEY or the OpenCode credential store."
+        "description": "OpenRouter appears when a key is found: a management key (OPENROUTER_MANAGEMENT_KEY, the Secret Service, or the file written by scripts/set-management-key.sh) for every key on the account, else an inference key from OPENROUTER_API_KEY or the OpenCode credential store."
       },
       {
         "key": "showCodex",
@@ -97,6 +99,26 @@
         "label": "Show Codex when signed in",
         "defaultValue": true,
         "description": "Codex appears only when Codex CLI has a plan with limits on this machine."
+      },
+      {
+        "key": "openrouterKeyRows",
+        "type": "integer",
+        "label": "OpenRouter: top keys shown",
+        "min": 0,
+        "max": 12,
+        "step": 1,
+        "defaultValue": 3,
+        "description": "Management key only: how many of the keys with the most spend this month the panel lists (0 hides them). The key itself is never a setting: store it with scripts/set-management-key.sh; the panel shows whether one is set."
+      },
+      {
+        "key": "openrouterAverageMonths",
+        "type": "integer",
+        "label": "OpenRouter: average of the last N months",
+        "min": 0,
+        "max": 12,
+        "step": 1,
+        "defaultValue": 2,
+        "description": "Management key only: this month's spend is metered against the average monthly spend of the previous N full calendar months (UTC). 0 shows dollars only and makes no analytics request."
       },
       {
         "key": "providerOrder",

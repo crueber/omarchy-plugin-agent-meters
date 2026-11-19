@@ -311,10 +311,16 @@ function main() {
 
   const logPath = path.join(grokHome, 'logs', 'unified.jsonl')
   const found = lastBillingMessage(logPath)
-  if (!found.message) fail(found.error)
-
-  const config = parseConfig(found.message)
-  if (!config) fail('the latest billing line has no recognizable config')
+  // Grok Bot is read first: someone who only uses Grok Bot has no CLI log.
+  const botReading = readBotUsage(botHomeDir())
+  const config = found.message ? parseConfig(found.message) : null
+  if (!config) {
+    if (botReading) {
+      process.stdout.write(JSON.stringify({ ok: true, source: 'grok-bot', tier: botReading.plan, bot: botReading }) + '\n')
+      return
+    }
+    fail(found.message ? 'the latest billing line has no recognizable config' : found.error)
+  }
 
   const since = config.weekly.periodStart > 0
     ? config.weekly.periodStart
@@ -325,7 +331,7 @@ function main() {
   // Grok's plan reports a weekly pool. A rolling 30-day local total is the
   // useful monthly companion and comes from the same ledgers.
   const localMonth = walkSessionUsage(sessionsRoot, Date.now() - 30 * DAY_MS)
-  const bot = readBotUsage(botHomeDir())
+  const bot = botReading
 
   const out = {
     ok: true,
