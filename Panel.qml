@@ -415,7 +415,7 @@ Panel {
     }
     var fetchedAt = result.fetchedAt > 0 ? result.fetchedAt : Date.now()
     root.providers = root.mergeProviders(root.providers, result.providers)
-    root.history = Model.advanceHistory(root.history, (findProvider(root.providers, "openrouter") || {}).money, Date.now())
+    root.history = Model.advanceHistory(root.history, Model.historyMoney(result.providers), Date.now())
     root.lastFetchMs = fetchedAt
     root.fetchFailures = 0
     root.lastErrorMessage = ""

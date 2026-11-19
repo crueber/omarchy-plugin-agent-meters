@@ -491,6 +491,14 @@ function advanceHistory(history, money, nowMs) {
   return h
 }
 
+// The money a fetch may record in the history: only a fresh, error-free
+// OpenRouter read. A failed read is merged with its last good (possibly last
+// month's) numbers, which must not be stamped as observed now.
+function historyMoney(freshProviders) {
+  var fresh = providerById(freshProviders, "openrouter")
+  return fresh && fresh.error === "" && fresh.money ? fresh.money : null
+}
+
 // Display options from the widget settings: how many months the account-wide
 // meter averages (0 = no meter) and how many key rows the panel lists.
 function openrouterOptions(options) {
@@ -884,8 +892,8 @@ function windowCaption(window, nowMs) {
   if (!window) return ""
   var parts = []
   if (window.mode === "meter" && window.effectiveLimit) {
-    var of = formatCurrency(window.spend) + " of " + formatCurrency(window.effectiveLimit)
-    parts.push(window.baselineText ? of + " " + window.baselineText : of)
+    var against = formatCurrency(window.spend) + " of " + formatCurrency(window.effectiveLimit)
+    parts.push(window.baselineText ? against + " " + window.baselineText : against)
   }
   var reset = resetText(window.resetsAt, nowMs)
   if (reset !== "") parts.push(reset)

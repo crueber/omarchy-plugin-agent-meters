@@ -152,8 +152,9 @@ stdin. The collector looks for a key in this order:
 
 Note that Omarchy's default keyring is set up **without a password**, so the
 Secret Service does not encrypt the key at rest any more than the `0600` file
-does; full-disk encryption covers both. The keyring keeps the key out of plain
-files you might copy or back up by accident.
+does (the keyring itself is a file under `~/.local/share/keyrings`); full-disk
+encryption covers both. If you protect your keyring with a password, the
+Secret Service copy is encrypted while the keyring is locked.
 
 **When a management key is found it takes over** — the inference key is not
 used at all. The collector reads `GET /api/v1/keys` (enabled, unexpired keys,
