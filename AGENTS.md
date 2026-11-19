@@ -16,9 +16,14 @@ Codex and Claude, and keeps agents with no plan, key or usage out of the bar.
 - `scripts/collect.js` — the single collector. Calls each provider source,
   normalizes to `{ id, name, available, tier, status, error, limits[],
   activity, money, budgets[] }`.
-- `scripts/grok.js` — Grok log/session/Bot reader, ported unchanged from the
-  Grok plugin.
-- `scripts/test-model.js`, `scripts/test-collect.js` — offline tests.
+- `scripts/grok.js` — Grok log/session/Bot reader, ported from the Grok
+  plugin; it also reports a Grok Bot reading when there is no CLI snapshot
+  (`source: "grok-bot"`).
+- `scripts/set-management-key.sh` — stores/removes the OpenRouter management
+  key (Secret Service, or the 0600 file); reads it from stdin/tty only.
+- `scripts/test-model.js`, `scripts/test-collect.js` — offline tests;
+  `scripts/test-https-stub.js` is the `node -r` preload that answers
+  OpenRouter requests in tests (never shipped).
 - `scripts/install.sh`, `scripts/validate.sh`.
 
 ## Data sources
@@ -29,7 +34,7 @@ Codex and Claude, and keeps agents with no plan, key or usage out of the bar.
 | Codex | `omarchy-agent-usage-codex --limits-only`, falling back to `~/.local/state/omarchy/agents/usage/codex.json` |
 | Grok | `scripts/grok.js` over `~/.grok`; falls back to the Omarchy `grok.json` record |
 | OpenCode | `opencode api GET /api/experimental/usage/limits` (retries `--standalone`) |
-| OpenRouter | `OPENROUTER_API_KEY`, `auth.json`, or `opencode auth export`, then `/api/v1/key` + `/api/v1/credits` |
+| OpenRouter | Management key (`OPENROUTER_MANAGEMENT_KEY` → `secret-tool lookup service agent-meters account openrouter-management` → `$XDG_DATA_HOME/agent-meters/openrouter-management-key`, 0600 in 0700, no symlinks): `/api/v1/keys`, `/api/v1/credits`, `/api/v1/analytics/meta`, `POST /api/v1/analytics/query`. Else `OPENROUTER_API_KEY`, `auth.json`, or `opencode auth export`, then `/api/v1/key` + `/api/v1/credits` |
 
 Claude's three windows arrive as percentages of 1 in Omarchy's record, so the
 collector scales a payload whose values are all ≤ 1.5 by 100. The labels map
@@ -45,12 +50,21 @@ the scoped windows. An API-key sign-in has no plan limits and stays hidden.
 ## Invariants
 
 1. Never print, cache, or pass a key on a command line. OpenRouter keys are
-   used only in the HTTPS header.
+   used only in the HTTPS header. The management key additionally never goes
+   into settings, manifest defaults, QML properties, IPC output, the
+   collector's JSON or error text (`scrub`); `collect.js` deletes
+   `OPENROUTER_MANAGEMENT_KEY` from its environment before spawning anything.
+   Do not add a text field for it; do not add a configurable API host or base
+   URL (that would redirect where the key is sent). Tests stub HTTPS with
+   `node -r scripts/test-https-stub.js`, never with a production override.
 2. `available` decides the bar. Do not add a provider that has neither a
    plan/limits nor a detected credential.
 3. Limits are clamped 0–100 and resets are epoch milliseconds.
-4. OpenRouter keeps one current and one previous completed cycle; a previous
-   cycle is only used when observed near its end.
+4. OpenRouter history keeps one current and up to 12 completed cycles (most
+   recent first, `previous` = the first) and a `scope` (`key` or `account`);
+   a completed cycle is only kept when observed within six hours of its end,
+   and a change of scope starts a new series. 1.1 caches (`previous` only)
+   migrate in `normalizeHistory`; do not bump `CACHE_VERSION` for this.
 5. Failed provider reads keep their last good numbers and gain `error`.
 6. Any text from a file or network goes through `plain()` before display.
 7. `panelProviders` is every available agent in `providerOrder` order;
@@ -68,6 +82,21 @@ the scoped windows. An API-key sign-in has no plan limits and stays hidden.
    `omarchy bar set crueber.agent-meters providerOrder ...`. `orderedProviders`
    appends any unnamed agent in the default order, so new providers appear
    without a settings edit.
+10. A management key takes precedence over the inference key, and a failing
+   or unreadable one (HTTP error, refused key file, Secret Service timeout)
+   reports its error with no fallback. Account-wide money has
+   `scope: "account"`; its rows are `limits` (`credits`, then `key-…`, value
+   rows carry `amount`). The collector always returns up to 12 key rows;
+   `openrouterKeyRows` is applied in `Model.windowsFor` only. The bar shows the
+   credits figure and only the month meter (`barWindows`).
+11. The analytics baseline is `money.baseline` `{ month, months, average,
+   checkedAt }` (average 0 = unavailable). The widget passes it back with
+   `--openrouter-baseline` so analytics is asked at most once per (month, N)
+   (failures: once a day); `openrouterAverageMonths` 0 makes no analytics
+   call. A setting change goes through `requestFetch("auto")`, never
+   `spawnFetch`. The baseline is used only for the month of
+   `money.resetsAt - 1` and the current N; otherwise the account-scoped
+   history is averaged.
 
 ## Testing
 

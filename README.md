@@ -38,7 +38,7 @@ remain available if you prefer one agent per widget.
 
 | Agent | Bar | Panel rows |
 | --- | --- | --- |
-| **OpenRouter** | OpenRouter mark + meter, or dollars | This cycle's spend against the key's own limit, previous cycle, credits, reset |
+| **OpenRouter** | OpenRouter mark + meter, or dollars; with a management key, the credits left and this month's meter | This cycle's spend against the key's own limit, previous cycle, credits, reset; with a management key, every key on the account |
 | **OpenCode** | OpenCode mark + up to three meters | 5-hour session, weekly, monthly, Console budgets, today's activity |
 | **Grok** | Grok mark + weekly meter | Weekly or monthly plan limit, Grok Bot's separate weekly allowance, this week's local activity |
 | **Codex** | Codex mark + session/weekly meters | Session, weekly, code review, model-scoped allowances, a Business seat's spend cap |
@@ -62,12 +62,15 @@ the mark stays in the theme foreground beside its neighbours.
 The collector runs once per refresh and reports what each agent's own source
 says. The bar only draws the agents that pass:
 
-- **OpenRouter** — appears when a key is found in `OPENROUTER_API_KEY`, the
-  OpenCode `auth.json`, or OpenCode 2's credential store
-  (`opencode auth export`). Keys are never cached by the widget.
+- **OpenRouter** — appears when a key is found: a [management
+  key](#openrouter-management-key) for the whole account, else an inference
+  key in `OPENROUTER_API_KEY`, the OpenCode `auth.json`, or OpenCode 2's
+  credential store (`opencode auth export`). Keys are never cached by the
+  widget.
 - **OpenCode** — appears when the installed `opencode` answers with a Go
   allowance.
-- **Grok** — appears when Grok's local billing snapshot has a weekly reading.
+- **Grok** — appears when Grok's local billing snapshot has a weekly reading,
+  or when only the Grok Bot desktop app has a reading.
 - **Codex** — appears when Codex CLI is signed in to a plan with rate limits.
   An API-key sign-in has no plan limits and stays out of the bar.
 - **Claude** — appears when Claude Code has a plan or limits. An expired
@@ -114,6 +117,86 @@ HTTPS `Authorization` header. Account credits come from
   partial or missed cycle cannot become a misleading baseline.
 - **Reset:** the key's own reset interval and date, monthly by default.
 
+#### OpenRouter management key
+
+An inference key only sees itself. A **management key** sees the whole
+account: create one at
+[openrouter.ai/settings/management-keys](https://openrouter.ai/settings/management-keys)
+and store it with the helper. Management keys cannot run completions, but they
+**can create and delete your API keys**, so the widget treats one as a
+credential, not a setting.
+
+```bash
+~/.config/omarchy/plugins/crueber.agent-meters/scripts/set-management-key.sh           # paste at the hidden prompt
+wl-paste | ~/.config/omarchy/plugins/crueber.agent-meters/scripts/set-management-key.sh  # or pipe it in
+~/.config/omarchy/plugins/crueber.agent-meters/scripts/set-management-key.sh --status   # where is it stored?
+~/.config/omarchy/plugins/crueber.agent-meters/scripts/set-management-key.sh --remove   # back to the per-key view
+```
+
+The helper never takes the key as an argument (argv is readable by every
+process through `/proc`), never prints it, and hands it to `secret-tool` on
+stdin. The collector looks for a key in this order:
+
+1. `OPENROUTER_MANAGEMENT_KEY` in the environment the shell runs the collector
+   with (your login shell);
+2. the freedesktop **Secret Service** — gnome-keyring on Omarchy — as the item
+   `service=agent-meters account=openrouter-management`
+   (`secret-tool lookup service agent-meters account openrouter-management`),
+   which is where the helper stores it;
+3. the file `${XDG_DATA_HOME:-~/.local/share}/agent-meters/openrouter-management-key`,
+   written by `set-management-key.sh --file` (or when no Secret Service
+   answers). The directory must be `0700` and the file `0600`, both owned by
+   you and neither a symlink; anything else is refused with an error that
+   says why. It deliberately lives outside `~/.config`, which many people sync
+   as dotfiles.
+
+Note that Omarchy's default keyring is set up **without a password**, so the
+Secret Service does not encrypt the key at rest any more than the `0600` file
+does; full-disk encryption covers both. The keyring keeps the key out of plain
+files you might copy or back up by accident.
+
+**When a management key is found it takes over** — the inference key is not
+used at all. The collector reads `GET /api/v1/keys` (enabled, unexpired keys,
+100 per page, at most 10 pages) and `GET /api/v1/credits`, and shows:
+
+- **Bar:** the OpenRouter mark, the credits left (`$20.81`) and one meter —
+  this month's spend against the average monthly spend of the previous N full
+  calendar months (UTC). Without a baseline there is no meter, only the
+  dollars; if OpenRouter does not report credits for the account, the dollars
+  are this month's spend. Text style: `$20.81 · 82%`.
+- **All keys · this month** — the sum of every key's `usage_monthly`, as a
+  meter captioned like *$49.93 of $61.20 avg (Sep–Oct) · Resets in 11d 7h*
+  (*(Oct)* for one month, *avg (2 of 3 months)* when fewer months are known).
+  Over the average it turns yellow, shows the real percent (say 120%) and says
+  *over the 2-month average* (or *over last month*).
+- **Credits** — *$20.81 left*: a plain figure, no meter, and no lifetime
+  purchase or usage totals.
+- **The top N keys by spend this month** (`openrouterKeyRows`, default 3).
+  Keys with no spend this month are left out. A key with a spending limit is a
+  meter against it with its reset (daily at 00:00 UTC, weekly on Monday 00:00
+  UTC, monthly on the 1st); a key without one is *$X.XX this month*. Rows use
+  the key's name, else *Key …* and four characters — never OpenRouter's full
+  key label.
+- **The average** comes from OpenRouter's analytics (`GET
+  /api/v1/analytics/meta` to find the cost metric, then one `POST
+  /api/v1/analytics/query` for the N months). The answer is parsed strictly;
+  anything unexpected means "no analytics", silently. A good answer is cached
+  with the widget's numbers and asked again only next month or when N
+  changes; an unavailable one is retried at most once a day. Without
+  analytics, the widget averages the months it has observed itself (it keeps
+  up to twelve completed months). `openrouterAverageMonths` 0 turns the meter
+  off and makes no analytics request at all.
+- **Errors:** an expired or revoked key (*Management key expired or
+  invalid*, with the link to create a new one), a key that is not allowed
+  (HTTP 403), an account whose key cannot list keys (HTTP 404, *personal
+  accounts may need an organization*), or no network. The widget keeps the
+  last good numbers with the error and **does not fall back to the inference
+  key**; fix or remove the management key.
+
+The panel's OpenRouter section ends with *Management key: set (Secret
+Service | file | env)* or *not set*; it never shows the key, and there is no
+text field for one anywhere in the widget.
+
 ### OpenCode
 
 The numbers come from the local OpenCode service — no second login, no key to
@@ -150,6 +233,10 @@ under `~/.config/Grok Bot/sand-client-persistence/*.blob`; the widget reads the
 newest small JSON blob for `percentUsed` and `nextResetMs`. Open Grok Bot to
 refresh that cache. The blob is read locally; no token or session cookie is
 touched. A Bot reading past its expiry is shown as stale with an em dash.
+
+Grok Bot on its own is enough: without the Grok CLI, Grok still appears with
+both meters — the plan's **Weekly limit** (empty, since only the CLI reports it)
+and **Grok Bot weekly** — with the plan label taken from the Bot's reading.
 
 Grok only updates its snapshot when a Grok session runs — also the only time
 your allowance can change — so run `grok` once (and open `/usage` if this is the
@@ -193,7 +280,7 @@ source, and the collector normalizes them into the same shape:
 
 | Agent | Source |
 | --- | --- |
-| OpenRouter | `OPENROUTER_API_KEY`, OpenCode `auth.json`, or `opencode auth export`; then `/api/v1/key` and `/api/v1/credits` |
+| OpenRouter | Management key (`OPENROUTER_MANAGEMENT_KEY`, `secret-tool`, or the `0600` key file): `/api/v1/keys`, `/api/v1/credits`, `/api/v1/analytics/meta`, `POST /api/v1/analytics/query`. Otherwise `OPENROUTER_API_KEY`, OpenCode `auth.json`, or `opencode auth export`; then `/api/v1/key` and `/api/v1/credits` |
 | OpenCode | `opencode api GET /api/experimental/usage/limits` (retries `--standalone`) |
 | Grok | `scripts/grok.js` over `~/.grok`, plus the Grok Bot app cache; falls back to Omarchy's `grok.json` record |
 | Codex | `omarchy-agent-usage-codex --limits-only`, falling back to `~/.local/state/omarchy/agents/usage/codex.json` |
@@ -224,7 +311,8 @@ Each meter follows its own window:
    the source marks as limited.
 2. **Orange** — at or above `warnPercent` (default 70).
 3. **Yellow** — OpenRouter only: the current cycle is over the previous
-   completed cycle.
+   completed cycle (with a management key: this month is over the N-month
+   average).
 4. **Foreground** — everything else.
 
 `warningColor` and `criticalColor` override the theme; empty values keep the
@@ -270,7 +358,9 @@ with `omarchy restart shell`.
   `nodeCommand`).
 - At least one of:
   - an OpenRouter key (`OPENROUTER_API_KEY`, or signed in to OpenRouter through
-    OpenCode);
+    OpenCode), or an OpenRouter management key stored with
+    `scripts/set-management-key.sh` (uses `secret-tool` from `libsecret`,
+    which Omarchy installs, when available);
   - OpenCode v2.x signed in to a workspace with a Go plan
     (`opencode auth list`);
   - Grok CLI with an existing login and at least one session;
@@ -332,10 +422,19 @@ omarchy bar set crueber.agent-meters showCodex false --json
 | `codexCommand` | `""` | Optional path to `omarchy-agent-usage-codex` |
 | `claudeCommand` | `""` | Optional path to `omarchy-agent-usage-claude` |
 | `showActivity` | `true` | Show the local-activity line per agent |
+| `openrouterKeyRows` | `3` | Management key only: how many of the keys with the most spend this month the panel lists (0–12) |
+| `openrouterAverageMonths` | `2` | Management key only: months the usage meter averages (0–12; 0 = dollars only, no analytics request) |
 | `onRightClick` | `""` | Optional shell command for right click |
 
 The per-agent switches in the panel are the same `show<Agent>` keys, written
 with `--json` so `shell.json` stores real booleans.
+
+The OpenRouter management key is **not** a setting and never goes into
+`shell.json`; store it with `scripts/set-management-key.sh` (see [OpenRouter
+management key](#openrouter-management-key)). Changing `openrouterKeyRows`
+redraws immediately; changing `openrouterAverageMonths` redraws from the
+observed months at once and asks analytics for the new window on the next
+allowed refresh.
 
 ## Privacy and security
 
@@ -343,23 +442,36 @@ with `--json` so `shell.json` stores real booleans.
   OpenRouter key is used only in an HTTPS `Authorization` header at request
   time. It is read from `OPENROUTER_API_KEY`, OpenCode's credential file, or
   `opencode auth export`.
+- **The OpenRouter management key** (which can create and delete API keys) is
+  read only from `OPENROUTER_MANAGEMENT_KEY`, the Secret Service, or a `0600`
+  file in a `0700` directory (symlinks and loose modes refused). The collector
+  removes it from its own environment before starting any other program, sends
+  it only to `openrouter.ai` in the `Authorization` header, and scrubs it from
+  any error text. It is never in `shell.json`, the widget settings, the cache,
+  the IPC output, the collector's JSON or the logs, and there is no field to
+  type it into.
 - **Local reads:** `~/.grok`, the Grok Bot app cache, OpenCode's local API,
   OpenCode's credential export, and Omarchy's usage records. The Grok helper
   never opens `~/.grok/auth.json`.
 - **Network reads by this plugin:** OpenRouter's `/api/v1/key` and
-  `/api/v1/credits` only. Claude's OAuth probe and Codex's app-server RPC are
+  `/api/v1/credits`, and with a management key `/api/v1/keys`,
+  `/api/v1/analytics/meta` and `POST /api/v1/analytics/query` (at most once a
+  month for a good answer). Claude's OAuth probe and Codex's app-server RPC are
   performed by Omarchy's own collectors, under their caching and rate-limit
   handling.
 - **Cache:** `~/.cache/agent-meters/usage.json` in a mode-`0700` directory. It
   holds displayed numbers, reset times, the masked OpenRouter key label, and
-  the OpenRouter cycle baseline. No prompts, responses, session text, tokens or
-  account identity. Delete it at any time.
+  the OpenRouter cycle history and analytics average. With a management key it
+  also holds the per-key rows (key names, spend, limits). No prompts,
+  responses, session text, tokens, keys or account identity. Delete it at any
+  time.
 - **Untrusted text:** every string from a file or network is neutralised before
   display, percentages are clamped to 0–100, and response sizes are bounded.
 - The plugin writes nothing outside
   `~/.config/omarchy/plugins/crueber.agent-meters/` and
   `~/.cache/agent-meters/`; bar layout and settings live in `shell.json`,
-  managed by Omarchy.
+  managed by Omarchy. Only the helper you run yourself writes the management
+  key (to the Secret Service or `~/.local/share/agent-meters/`).
 
 See `SECURITY.md` for reporting and the full data-flow notes.
 
@@ -391,6 +503,32 @@ expired. Open the Grok Bot desktop app to refresh it.
 works with `opencode api GET /api/experimental/usage/limits`; the collector
 also retries once with `--standalone`.
 
+**OpenRouter says "Management key expired or invalid".** Create a new key at
+[openrouter.ai/settings/management-keys](https://openrouter.ai/settings/management-keys)
+and run `scripts/set-management-key.sh` again, or run it with `--remove` to go
+back to the per-key view. The widget does not switch to the inference key on
+its own.
+
+**"…can't list keys (personal accounts may need an organization)".**
+OpenRouter answered HTTP 404 for `/api/v1/keys`; remove the management key
+with `set-management-key.sh --remove` to use the per-key view.
+
+**"…must be mode 0600" / "…is a symlink" / "…must be mode 0700".** The key
+file is refused until it is a regular file you own with
+`chmod 600 ~/.local/share/agent-meters/openrouter-management-key` inside
+`chmod 700 ~/.local/share/agent-meters`. Rerunning
+`set-management-key.sh --file` rewrites both correctly.
+
+**"The Secret Service did not answer".** `secret-tool lookup` took more than
+3 seconds, usually because the keyring is locked. Unlock it (Omarchy's default
+keyring has no password, so this should not happen there), or store the key
+with `set-management-key.sh --file`.
+
+**No usage meter with a management key.** There is no baseline yet: analytics
+was unavailable and the widget has not observed a full month. The meter
+appears after the first completed month, or set `openrouterAverageMonths` to
+`0` to keep dollars only on purpose.
+
 **OpenRouter says "no OpenRouter key found".** Set `OPENROUTER_API_KEY`, sign
 in to OpenRouter in OpenCode (`opencode auth login`), or point `authFile` at an
 OpenCode 1 credential file. OpenCode 2 users need no extra step: the collector
@@ -410,6 +548,7 @@ path of `node`.
 
 ```bash
 omarchy plugin disable crueber.agent-meters
+~/.config/omarchy/plugins/crueber.agent-meters/scripts/set-management-key.sh --remove  # before removing, if you stored one
 omarchy plugin remove crueber.agent-meters --yes
 rm -rf ~/.cache/agent-meters
 ```
@@ -451,8 +590,10 @@ node scripts/test-collect.js
 
 The tests are offline: `test-model.js` covers parsing, window/state math,
 OpenRouter cycle history, ordering, switches and cache round-trips;
-`test-collect.js` drives the collector with fake `opencode`, `claude` and
-`codex` binaries and a temporary HOME, so CI needs no real account.
+`test-collect.js` drives the collector with fake `opencode`, `claude`,
+`codex` and `secret-tool` binaries, a temporary HOME, and OpenRouter answered by
+`scripts/test-https-stub.js` (preloaded with `node -r`), so CI needs no real
+account and no network.
 
 Layout:
 
@@ -464,6 +605,8 @@ Model.js               pure parsing, windows, state, cache, poll coordination
 marks/                 monochrome vector marks (OpenRouter, OpenCode, Grok, Codex, Claude)
 scripts/collect.js     one collector, five provider sources
 scripts/grok.js        Grok log/session/Bot reader
+scripts/set-management-key.sh  store/remove the OpenRouter management key (stdin only)
+scripts/test-https-stub.js     offline OpenRouter answers for the collector tests
 scripts/install.sh     deploy to the live plugin directory
 scripts/validate.sh    manifest + files + tests + omarchy plugin validate
 ```
@@ -481,8 +624,15 @@ This repository ships one installer and no screenshot or demo-capture script.
   plugin does not fetch or execute code from the network.
 - **Local executables.** Runtime reads use only `node`, `opencode`,
   `omarchy-agent-usage-claude` and `omarchy-agent-usage-codex` (each
-  configurable), plus the local files described above.
-- **Network.** Only OpenRouter's `/api/v1/key` and `/api/v1/credits`, with the
+  configurable), and `secret-tool lookup service agent-meters account
+  openrouter-management` (from `libsecret`, 3-second timeout; skipped when not
+  installed), plus the local files described above. The optional
+  `scripts/set-management-key.sh` helper, run only by the user, calls
+  `secret-tool store|clear` and writes nothing but
+  `~/.local/share/agent-meters/openrouter-management-key`.
+- **Network.** Only `https://openrouter.ai`: `/api/v1/key` and
+  `/api/v1/credits`, and with a management key `/api/v1/keys`,
+  `/api/v1/analytics/meta` and `POST /api/v1/analytics/query`, always with the
   key in an HTTPS header. Claude's and Codex's probes belong to Omarchy's
   collectors.
 - **Previews.** `preview.png` and `screenshots/bar.png` are composed offline
@@ -494,7 +644,7 @@ This repository ships one installer and no screenshot or demo-capture script.
 
 - **Plugin id:** `crueber.agent-meters`
 - **Name:** Agent Meters
-- **Version:** 1.1.1
+- **Version:** 1.2.0
 - **Kind:** `bar-widget` (`Panel.qml`)
 - **Category:** AI
 - **Aliases:** `agent-meters`, `agents`, `ai-agents`, `openrouter`, `opencode`,
