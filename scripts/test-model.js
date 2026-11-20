@@ -496,4 +496,21 @@ test('only a fresh, error-free OpenRouter read advances the history', function()
     'a failed read past the 1st leaves the history alone')
 })
 
+test('the panel lists OpenRouter without a key; the bar does not', function() {
+  const ids = function(list) { return list.map(function(p) { return p.id }).join(',') }
+  const claude = provider()
+  const missing = provider({ id: 'openrouter', available: false, hint: 'No OpenRouter key found.' })
+  const ordered = M.orderedProviders([claude, missing], {}, '')
+  assert.strictEqual(ids(ordered), 'claude', 'an agent with no key or plan is not available')
+  assert.strictEqual(ids(M.panelProviders(ordered, [claude, missing])), 'claude,openrouter',
+    'the panel gets the setup section last')
+  assert.strictEqual(ids(M.shownProviders(ordered, {})), 'claude', 'the bar still only draws available agents')
+
+  const keyed = provider({ id: 'openrouter' })
+  const ordered2 = M.orderedProviders([claude, keyed], {}, '')
+  assert.strictEqual(ids(M.panelProviders(ordered2, [claude, keyed])), 'openrouter,claude',
+    'an available OpenRouter is listed once, in providerOrder order')
+  assert.strictEqual(ids(M.panelProviders([], [])), '', 'no providers, no setup section')
+})
+
 process.stdout.write('all model tests passed\n')

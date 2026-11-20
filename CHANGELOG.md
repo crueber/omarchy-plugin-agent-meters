@@ -29,8 +29,14 @@
   (loose modes, other owners and symlinks are refused). It is never on a
   command line, in `shell.json`, the cache, IPC output, the collector's JSON
   or error text; the collector removes it from its environment before starting
-  any other program. The panel only says where it came from. There is no text
-  field for it; the helper reads it with echo off and passes it on stdin.
+  any other program. The panel's settings view sets, changes and removes it: a
+  masked field hands it to the helper on stdin and is cleared, so it never
+  becomes a setting. The settings page still has no field for it.
+- **The panel's settings view.** A gear in the panel hero opens a settings
+  page with the per-agent show switches (moved out of the agent rows, which no
+  longer spend a row on a percentage and a toggle), the OpenRouter management
+  key, and steppers for `openrouterKeyRows` and `openrouterAverageMonths`.
+  Escape goes back to the agents.
 - **Grok Bot without the Grok CLI.** Grok now appears when only the Grok Bot
   desktop app has a reading, with both meters: the plan's **Weekly limit**
   (empty) and **Grok Bot weekly**, and the plan label from the Bot's reading.

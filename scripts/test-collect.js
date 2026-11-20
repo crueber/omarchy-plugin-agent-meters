@@ -243,6 +243,7 @@ try {
     assert.ok(r.or, 'openrouter record present')
     assert.strictEqual(r.or.available, false)
     assert.strictEqual(r.or.keySource, '')
+    assert.ok(r.or.hint.indexOf('management key') >= 0, 'the panel explains how to add one')
     assert.deepStrictEqual(r.calls, [], 'no request without a key')
     assert.deepStrictEqual(r.secretCalls, ['lookup service agent-meters account openrouter-management'],
       'one Secret Service lookup, attributes only')

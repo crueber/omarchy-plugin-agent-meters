@@ -1285,7 +1285,12 @@ async function collectOpenRouter() {
   }
 
   const key = resolveOpenRouterKey()
-  if (key === '') return provider
+  if (key === '') {
+    // The panel lists OpenRouter even without a key so a management key can be
+    // set there; this is the line that explains the empty section.
+    provider.hint = 'No OpenRouter key found. Open Agent Meters settings (gear) to set a management key, or add an inference key.'
+    return provider
+  }
 
   provider.available = true
   let keyDoc
