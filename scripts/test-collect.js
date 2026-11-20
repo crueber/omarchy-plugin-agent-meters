@@ -461,7 +461,7 @@ try {
     assert.strictEqual(loose.or.available, true, 'a refused key file is shown')
     assert.strictEqual(loose.or.keySource, 'file')
     assert.ok(loose.or.error.indexOf('must be mode 0600') >= 0, loose.or.error)
-    assert.ok(loose.or.error.indexOf("The inference key isn't used") >= 0)
+    assert.ok(loose.or.error.indexOf("refused. The inference key isn't used") >= 0, 'the two sentences are separated')
     assert.deepStrictEqual(loose.calls, [], 'no request at all, not even with the inference key')
     assertNoKey(loose)
 
