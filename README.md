@@ -51,7 +51,8 @@ Every agent gets:
 - one meter per limit window, coloured by that window's own state;
 - a panel section with percentages, meters, reset countdowns and clocks;
 - an optional local-activity line (today, or this week for Grok);
-- a show switch and a drag handle.
+- a row in the panel's settings with a show switch, and a drag handle in the
+  agent list.
 
 The agent marks are deliberately **not** tinted by state. When something is at
 its limit, the meter, the percentage and the bar's active state turn urgent;
@@ -90,10 +91,11 @@ shows that computer's agents.
   want it. A ghost follows the pointer, an accent line shows the insertion
   point, and the bar icons follow immediately. Dropping on the last row's lower
   half moves the agent to the end.
-- **Show switches:** every row has a switch, on by default. Turning one off
-  keeps the row — and its limits — in the panel so you can read it or switch it
-  back on, but removes its mark and meters from the bar. The hero reports how
-  many agents are hidden, and an all-hidden bar says so in its tooltip.
+- **Show switches:** in the panel's settings (the gear), every agent has a
+  switch, on by default. Turning one off keeps its row — and its limits — in
+  the agent list so you can read it or switch it back on, but removes its mark
+  and meters from the bar. The hero reports how many agents are hidden, and an
+  all-hidden bar says so in its tooltip.
 - Both controls write the same widget settings the settings page exposes
   (`providerOrder`, `show<Agent>`), so the panel and `shell.json` never drift.
 
@@ -122,9 +124,18 @@ HTTPS `Authorization` header. Account credits come from
 An inference key only sees itself. A **management key** sees the whole
 account: create one at
 [openrouter.ai/settings/management-keys](https://openrouter.ai/settings/management-keys)
-and store it with the helper. Management keys cannot run completions, but they
-**can create and delete your API keys**, so the widget treats one as a
-credential, not a setting.
+and set it from the panel or store it with the helper. Management keys cannot
+run completions, but they **can create and delete your API keys**, so the
+widget treats one as a credential, not a setting.
+
+From the panel: open Agent Meters, click the gear, and set the key there (the
+OpenRouter block in the panel's settings view). The field is masked (the eye
+button reveals it), Enter or the check button stores it, Esc cancels. The
+status then says *Management key: set (Secret Service)* or *set (file)*, and a
+trash button removes it. The key never goes into the widget's settings; it is
+handed to the helper below on stdin and the field is cleared.
+
+The same thing from a terminal:
 
 ```bash
 ~/.config/omarchy/plugins/crueber.agent-meters/scripts/set-management-key.sh           # paste at the hidden prompt
@@ -194,9 +205,12 @@ used at all. The collector reads `GET /api/v1/keys` (enabled, unexpired keys,
   last good numbers with the error and **does not fall back to the inference
   key**; fix or remove the management key.
 
-The panel's OpenRouter section ends with *Management key: set (Secret
-Service | file | env)* or *not set*; it never shows the key, and there is no
-text field for one anywhere in the widget.
+The panel's settings view shows *Management key: set (Secret
+Service | file | env)* or *not set*. The key button sets or changes it (a
+masked field; Esc cancels) and the trash button removes it; the key is never
+shown again and is not a setting. When the key comes from
+`OPENROUTER_MANAGEMENT_KEY`, the panel says so and leaves it to the
+environment.
 
 ### OpenCode
 
@@ -375,10 +389,12 @@ No elevated privileges, no extra services and no daemon of its own.
 - **Left click** — open or close the panel.
 - **Middle click** — refresh every agent now.
 - **Right click** — open this plugin's page, or run `onRightClick` if set.
+- **Gear** — open the panel's settings (agent switches, OpenRouter management
+  key, account-view numbers); the back arrow returns to the agents.
 - **`r`** — refresh while the panel is open.
-- **Escape** — close the panel.
+- **Escape** — close the panel (in settings, go back first).
 - **Drag the `⠿` grip** — reorder agents.
-- **Switch** — show or hide an agent in the bar.
+- **Settings switches** — show or hide an agent in the bar.
 
 IPC, useful for scripts and diagnostics:
 
@@ -388,6 +404,7 @@ omarchy-shell agent-meters providers  # visible providers as JSON
 omarchy-shell agent-meters refresh
 omarchy-shell agent-meters toggle
 omarchy-shell agent-meters move grok -1
+omarchy-shell agent-meters setupKey   # open settings with the key field focused
 ```
 
 ## Settings
@@ -400,6 +417,12 @@ omarchy bar set crueber.agent-meters refreshIntervalSec 600
 omarchy bar set crueber.agent-meters barStyle text
 omarchy bar set crueber.agent-meters showCodex false --json
 ```
+
+The panel's settings view (the gear in the panel) covers the per-agent
+switches, the OpenRouter management key, and the two OpenRouter account-view
+settings, `openrouterKeyRows` and `openrouterAverageMonths`, as steppers. It
+writes the same `show<Agent>` and OpenRouter keys to `shell.json`, so the
+panel and the widget settings UI never drift.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
@@ -427,15 +450,17 @@ omarchy bar set crueber.agent-meters showCodex false --json
 | `openrouterAverageMonths` | `2` | Management key only: months the usage meter averages (0–12; 0 = dollars only, no analytics request) |
 | `onRightClick` | `""` | Optional shell command for right click |
 
-The per-agent switches in the panel are the same `show<Agent>` keys, written
-with `--json` so `shell.json` stores real booleans.
+The per-agent switches in the panel's settings view are the same
+`show<Agent>` keys, written with `--json` so `shell.json` stores real
+booleans.
 
 The OpenRouter management key is **not** a setting and never goes into
-`shell.json`; store it with `scripts/set-management-key.sh` (see [OpenRouter
-management key](#openrouter-management-key)). Changing `openrouterKeyRows`
-redraws immediately; changing `openrouterAverageMonths` redraws from the
-observed months at once and asks analytics for the new window on the next
-allowed refresh.
+`shell.json`; set it from the panel's settings view or with
+`scripts/set-management-key.sh` (see [OpenRouter management
+key](#openrouter-management-key)). The account-view steppers write
+`openrouterKeyRows` and `openrouterAverageMonths`; changing the first redraws
+immediately, and changing the second redraws from the observed months at once
+and asks analytics for the new window on the next allowed refresh.
 
 ## Privacy and security
 
@@ -449,8 +474,9 @@ allowed refresh.
   removes it from its own environment before starting any other program, sends
   it only to `openrouter.ai` in the `Authorization` header, and scrubs it from
   any error text. It is never in `shell.json`, the widget settings, the cache,
-  the IPC output, the collector's JSON or the logs, and there is no field to
-  type it into.
+  the IPC output, the collector's JSON or the logs. The only place to type one
+  is the panel's masked key field, which hands it to
+  `scripts/set-management-key.sh` on stdin and clears it immediately.
 - **Local reads:** `~/.grok`, the Grok Bot app cache, OpenCode's local API,
   OpenCode's credential export, and Omarchy's usage records. The Grok helper
   never opens `~/.grok/auth.json`.
@@ -506,9 +532,10 @@ also retries once with `--standalone`.
 
 **OpenRouter says "Management key expired or invalid".** Create a new key at
 [openrouter.ai/settings/management-keys](https://openrouter.ai/settings/management-keys)
-and run `scripts/set-management-key.sh` again, or run it with `--remove` to go
-back to the per-key view. The widget does not switch to the inference key on
-its own.
+and set it again from the panel's OpenRouter section (or with
+`scripts/set-management-key.sh`), or remove it with the trash button (or
+`--remove`) to go back to the per-key view. The widget does not switch to the
+inference key on its own.
 
 **"…can't list keys (personal accounts may need an organization)".**
 OpenRouter answered HTTP 404 for `/api/v1/keys`; remove the management key

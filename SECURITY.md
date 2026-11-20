@@ -101,9 +101,17 @@ in any process's argv (`/proc/<pid>/cmdline` is world-readable). With
 `--file`, or when no Secret Service answers, it writes the file through a
 `0600` temporary file in the `0700` directory and renames it into place. It
 removes the copy in the other location so only one remains. `--remove`
-deletes both. There is deliberately no text field for the key in the panel or
-the settings page: QML text fields and widget settings flow into `shell.json`
-and the shell's memory.
+deletes both.
+
+The panel's settings view (the gear) runs the same helper. Its masked
+`TextField` holds the key only in a transient QML property (never in a
+`setting()` key, which is what flows into `shell.json`); on submit the property
+is handed to the helper's stdin and cleared, the field is hidden, and only the
+helper's exit status is read. The panel never displays or logs the key. The
+settings page still has no field for it. As with any password typed into a
+window, a screen recorder or a screenshot taken while the field is revealed can
+capture it, which is why the field starts masked and is cleared on submit or
+Esc.
 
 **Use.** The key is sent only to `https://openrouter.ai` in the
 `Authorization: Bearer` header. Error messages from the network or from

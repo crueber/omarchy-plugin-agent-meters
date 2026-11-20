@@ -17,7 +17,6 @@ var DEFAULT_KEY_ROWS = 3
 var MAX_KEY_ROWS = 12
 var MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 var ACCOUNT_LABEL = "All keys"
-var MANAGEMENT_HELPER = "scripts/set-management-key.sh"
 
 // ----------------------------------------------------------------- sanitizers
 
@@ -350,6 +349,17 @@ function orderedProviders(providers, visibility, orderValue) {
   for (var j = 0; j < visible.length; j++) {
     if (out.indexOf(visible[j]) < 0) out.push(visible[j])
   }
+  return out
+}
+
+// The panel lists the available agents in order, then OpenRouter even when it
+// has no key or limits: its section explains how to set up a management key,
+// and the bar never sees that entry — it draws visibleProviders, which needs
+// `available`.
+function panelProviders(list, providers) {
+  var out = (list || []).slice()
+  var openrouter = providerById(providers, "openrouter")
+  if (openrouter && openrouter.available !== true && out.indexOf(openrouter) < 0) out.push(openrouter)
   return out
 }
 
@@ -922,12 +932,14 @@ function baselineArg(provider) {
   return b.month + ":" + b.months + ":" + b.average.toFixed(4) + ":" + Math.round(b.checkedAt)
 }
 
-// "Management key: set (Secret Service)" / "Management key: not set · …".
+// "Management key: set (Secret Service)" / "Management key: not set". The
+// panel's settings view sets and removes it; this line only reports where it
+// came from.
 function managementKeyText(provider) {
   if (!provider || provider.id !== "openrouter") return ""
   var names = { "env": "env", "secret-service": "Secret Service", "file": "file" }
   var source = names[provider.keySource] || ""
-  if (source === "") return "Management key: not set · " + MANAGEMENT_HELPER + " adds one"
+  if (source === "") return "Management key: not set"
   if (provider.source === "openrouter-management" && provider.money === null && provider.error !== "") {
     return "Management key: " + source + " (not usable)"
   }

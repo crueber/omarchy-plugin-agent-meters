@@ -62,9 +62,31 @@ Panel {
   // writable so a move repaints immediately, before shell.json reloads.
   property string providerOrder: String(setting("providerOrder", ""))
 
+  // OpenRouter management key entry. The key itself only lives in keyDraft
+  // (and the password field) between typing and the helper's stdin; it is
+  // never a setting, so it cannot reach shell.json or the cache. Everything
+  // key-related lives on the panel's own settings view, not in the agent list.
+  property bool settingsOpen: false
+  property bool keyEditing: false
+  property string keyDraft: ""
+  property string keyMessage: ""
+  property bool keyRevealed: false
+  property string keyPhase: ""   // "", "storing", "removing", "reading"
+  readonly property bool keyBusy: keyPhase !== ""
+  onSettingsOpenChanged: if (!settingsOpen) cancelKeyEdit()
+  // The field takes keyboard focus while the editor is open; give it back to
+  // the panel when the editor closes, or Esc and the close key stop working.
+  onKeyEditingChanged: if (!keyEditing && opened) Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+
   readonly property string executable: nodeCommand !== "" ? nodeCommand : "node"
   readonly property string helperPath: {
     var value = String(Qt.resolvedUrl("scripts/collect.js"))
+    if (value.indexOf("file://") === 0) value = value.slice(7)
+    try { value = decodeURIComponent(value) } catch (e) {}
+    return value
+  }
+  readonly property string keyHelperPath: {
+    var value = String(Qt.resolvedUrl("scripts/set-management-key.sh"))
     if (value.indexOf("file://") === 0) value = value.slice(7)
     try { value = decodeURIComponent(value) } catch (e) {}
     return value
@@ -87,9 +109,24 @@ Panel {
   property bool pollLeader: false
   property int consumedSeq: 0
 
-  readonly property var panelProviders: Model.orderedProviders(providers, {}, providerOrder)
-  readonly property var visibleProviders: Model.shownProviders(panelProviders, visibility)
-  readonly property int hiddenCount: panelProviders.length - visibleProviders.length
+  // The agents the bar may draw: available ones in providerOrder order.
+  readonly property var availableProviders: Model.orderedProviders(providers, {}, providerOrder)
+  // The panel also lists OpenRouter when it has no key, so the management key
+  // can be set there. The bar never receives that entry.
+  readonly property var panelProviders: Model.panelProviders(availableProviders, providers)
+  readonly property var visibleProviders: Model.shownProviders(availableProviders, visibility)
+  readonly property int hiddenCount: Math.max(0, availableProviders.length - visibleProviders.length)
+  readonly property var openrouterProvider: Model.providerById(panelProviders, "openrouter")
+  readonly property bool keyStored: openrouterProvider !== null
+    && (openrouterProvider.keySource === "secret-service" || openrouterProvider.keySource === "file")
+  readonly property bool keyFromEnv: openrouterProvider !== null && openrouterProvider.keySource === "env"
+  readonly property string keyStatusText: {
+    if (keyPhase === "storing") return "Storing the management key…"
+    if (keyPhase === "removing") return "Removing the management key…"
+    if (keyPhase === "reading") return "Reading the account…"
+    var text = Model.managementKeyText(openrouterProvider)
+    return text !== "" ? text : "Management key: not set"
+  }
 
   // Drag-to-reorder state. The ghost and insertion line live in the panel's
   // Flickable content, in the same coordinates as the sections.
@@ -122,7 +159,7 @@ Panel {
   }
   readonly property string heroMeta: {
     var parts = []
-    if (panelProviders.length > 0) parts.push(panelProviders.length + (panelProviders.length === 1 ? " agent" : " agents"))
+    if (availableProviders.length > 0) parts.push(availableProviders.length + (availableProviders.length === 1 ? " agent" : " agents"))
     if (hiddenCount > 0) parts.push(hiddenCount + " hidden")
     var updated = Model.updatedText(root.lastFetchMs, root.nowMs)
     if (updated !== "") parts.push(updated.replace(/^Updated /, ""))
@@ -139,7 +176,7 @@ Panel {
   }
   readonly property string tooltipText: visibleProviders.length > 0
     ? Model.tooltip(visibleProviders, history, nowMs, warnPercent, criticalPercent, orOptions)
-    : (panelProviders.length > 0
+    : (availableProviders.length > 0
       ? "All agents are hidden from the bar\nOpen Agent Meters to show one"
       : "No AI agents found")
 
@@ -169,6 +206,17 @@ Panel {
     orderProc.command = ["/bin/sh", "-lc",
       "omarchy bar set " + Model.shellQuote(root.moduleName) + " " + Model.shellQuote(showKey(id))
       + (shown ? " true" : " false") + " --json"]
+    orderProc.running = true
+  }
+
+  function saveSetting(name, value) {
+    var next = {}
+    for (var key in settings) if (key !== "id") next[key] = settings[key]
+    next[name] = value
+    root.settings = next
+    orderProc.command = ["/bin/sh", "-lc",
+      "omarchy bar set " + Model.shellQuote(root.moduleName) + " " + Model.shellQuote(name)
+      + " " + Model.shellQuote(String(value)) + " --json"]
     orderProc.running = true
   }
 
@@ -393,6 +441,83 @@ Panel {
     requestFetch("manual")
   }
 
+  // ------------------------------------------------------ management key
+
+  // The helper's key shape (scripts/set-management-key.sh): 16–512 characters
+  // from the URL-safe set. Pre-checked here only to avoid a pointless process;
+  // the helper is the authority.
+  function keyLooksValid(value) {
+    var key = String(value || "")
+    return key.length >= 16 && key.length <= 512 && /^[A-Za-z0-9._~+\/=:-]+$/.test(key)
+  }
+
+  function beginKeyEdit() {
+    if (root.keyBusy || root.keyFromEnv) return
+    root.settingsOpen = true
+    root.keyDraft = ""
+    root.keyMessage = ""
+    root.keyRevealed = false
+    root.keyEditing = true
+  }
+
+  function cancelKeyEdit() {
+    root.keyEditing = false
+    root.keyDraft = ""
+    root.keyMessage = ""
+    root.keyRevealed = false
+  }
+
+  // The key goes to the helper on stdin, never on its command line. The draft
+  // is cleared as soon as it is handed over, so the panel does not keep it.
+  function submitKey() {
+    if (root.keyBusy) return
+    var key = String(root.keyDraft || "").trim()
+    if (!keyLooksValid(key)) {
+      root.keyMessage = "That does not look like an OpenRouter key; nothing was stored."
+      return
+    }
+    root.keyEditing = false
+    root.keyRevealed = false
+    root.keyMessage = ""
+    root.keyDraft = ""
+    keyProc.pending = key
+    root.keyPhase = "storing"
+    keyProc.running = true
+  }
+
+  function removeKey() {
+    if (root.keyBusy || !root.keyStored) return
+    root.keyEditing = false
+    root.keyDraft = ""
+    root.keyMessage = ""
+    root.keyRevealed = false
+    root.keyPhase = "removing"
+    removeKeyProc.running = true
+  }
+
+  // A changed credential is read now instead of on the poll floor, so the
+  // panel's status and numbers catch up while the user is looking at them.
+  function refreshAfterKeyChange() {
+    root.nowMs = Date.now()
+    if (!root.pollLeader) {
+      keyRetryTimer.stop()
+      return
+    }
+    if (fetchProc.running) {
+      // A fetch that started before the key changed must not be allowed to
+      // decide the result; try again as soon as it exits.
+      keyRetryTimer.restart()
+      return
+    }
+    keyRetryTimer.stop()
+    spawnFetch()
+  }
+
+  function finishKeyAction() {
+    keyReadTimer.stop()
+    if (root.keyPhase === "reading") root.keyPhase = ""
+  }
+
   function spawnFetch() {
     root.lastAttemptMs = Date.now()
     root.gotOutput = false
@@ -424,6 +549,7 @@ Panel {
     Model.pollPublish(root, { fetchedAt: fetchedAt, providers: root.providers, history: root.history })
     writeCache()
     scheduleNextPoll(nextAutoDelayMs())
+    root.finishKeyAction()
   }
 
   function handleFailure(message) {
@@ -433,6 +559,7 @@ Panel {
     Model.pollPublish(root, { fetchedAt: root.lastFetchMs, providers: root.providers, history: root.history })
     writeCache()
     scheduleNextPoll(nextAutoDelayMs())
+    root.finishKeyAction()
   }
 
   // A new averaging window needs a new analytics baseline. Ask through the
@@ -515,6 +642,69 @@ Panel {
     }
   }
 
+  // scripts/set-management-key.sh. The key is written to its stdin and never
+  // appears on the command line or in the environment; output is drained into
+  // collectors so the shell does not echo it.
+  Process {
+    id: keyProc
+    property string pending: ""
+    command: [root.keyHelperPath]
+    stdinEnabled: true
+    stdout: StdioCollector {}
+    stderr: StdioCollector {}
+    onStarted: {
+      write(keyProc.pending + "\n")
+      keyProc.pending = ""
+    }
+    onExited: function(exitCode) {
+      keyProc.pending = ""
+      if (exitCode === 0) {
+        root.keyPhase = "reading"
+        root.keyMessage = ""
+        keyReadTimer.restart()
+        root.refreshAfterKeyChange()
+      } else {
+        root.keyPhase = ""
+        root.keyMessage = exitCode === 127
+          ? "The key helper is missing; reinstall the plugin."
+          : "The key was not stored. Check it at openrouter.ai/settings/management-keys and try again."
+      }
+    }
+  }
+
+  Process {
+    id: removeKeyProc
+    command: [root.keyHelperPath, "--remove"]
+    stdout: StdioCollector {}
+    stderr: StdioCollector {}
+    onExited: function(exitCode) {
+      if (exitCode === 0) {
+        root.keyPhase = "reading"
+        keyReadTimer.restart()
+        root.refreshAfterKeyChange()
+      } else {
+        root.keyPhase = ""
+        root.keyMessage = "The stored key could not be removed."
+      }
+    }
+  }
+
+  // A fetch that never reports back (not the poll leader, or a collector that
+  // hangs) must not leave the key row saying "Reading the account…".
+  Timer {
+    id: keyReadTimer
+    interval: 15000
+    onTriggered: root.finishKeyAction()
+  }
+
+  // Retries the post-key-change read while a fetch that started before the
+  // change is still running.
+  Timer {
+    id: keyRetryTimer
+    interval: 2000
+    onTriggered: root.refreshAfterKeyChange()
+  }
+
   Timer {
     id: poll
     repeat: true
@@ -554,6 +744,8 @@ Panel {
 
   onOpenedChanged: if (!opened) {
     root.cancelSectionDrag()
+    root.settingsOpen = false
+    root.cancelKeyEdit()
   } else {
     nowMs = Date.now()
     if (root.pollLeader && root.lastFetchMs > 0 && Date.now() - root.lastFetchMs > root.refreshIntervalSec * 1000) {
@@ -585,6 +777,9 @@ Panel {
     function hide(): void { root.close() }
     function toggle(): void { root.toggle() }
     function refresh(): string { root.refreshNow(); return "ok" }
+    // Opens the settings view and the OpenRouter management key editor. The
+    // key itself never crosses IPC: this only opens the masked field.
+    function setupKey(): string { root.open(); root.settingsOpen = true; root.beginKeyEdit(); return "ok" }
     function text(): string {
       var parts = []
       for (var i = 0; i < root.visibleProviders.length; i++) {
@@ -762,7 +957,12 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      onCloseRequested: root.close()
+      blocked: root.keyEditing || root.keyBusy
+      onCloseRequested: {
+        if (root.keyEditing) root.cancelKeyEdit()
+        else if (root.settingsOpen) root.settingsOpen = false
+        else root.close()
+      }
       onTextKey: function(text) {
         if (text === "r") root.refreshNow()
       }
@@ -785,8 +985,8 @@ Panel {
           PanelHero {
             width: parent.width
             title: "Agent Meters"
-            meta: root.heroMeta
-            detail: root.heroDetail
+            meta: root.settingsOpen ? "Settings" : root.heroMeta
+            detail: root.settingsOpen ? "" : root.heroDetail
             foreground: root.foreground
             fontFamily: root.fontFamily
 
@@ -801,13 +1001,26 @@ Panel {
             }
 
             trailingControl: Component {
-              PanelActionButton {
-                iconText: "󰑐"
-                tooltipText: root.busy ? "Refreshing…" : "Refresh (r)"
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-                enabled: !root.busy
-                onClicked: root.refreshNow()
+              Row {
+                spacing: Style.space(2)
+
+                PanelActionButton {
+                  visible: !root.settingsOpen
+                  iconText: "󰑐"
+                  tooltipText: root.busy ? "Refreshing…" : "Refresh (r)"
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  enabled: !root.busy
+                  onClicked: root.refreshNow()
+                }
+
+                PanelActionButton {
+                  iconText: root.settingsOpen ? "󰁍" : "󰒓"
+                  tooltipText: root.settingsOpen ? "Back to agents" : "Settings"
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  onClicked: root.settingsOpen = !root.settingsOpen
+                }
               }
             }
           }
@@ -815,7 +1028,7 @@ Panel {
           PanelSeparator { foreground: root.foreground }
 
           Column {
-            visible: root.panelProviders.length === 0
+            visible: root.panelProviders.length === 0 && !root.settingsOpen
             width: parent.width
             spacing: Style.space(4)
 
@@ -842,20 +1055,332 @@ Panel {
             }
           }
 
-          Repeater {
-            id: sectionsRepeater
-            model: root.panelProviders
-            delegate: ProviderSection { provider: modelData }
+          Column {
+            width: parent.width
+            spacing: Style.space(12)
+            visible: !root.settingsOpen
+
+            Repeater {
+              id: sectionsRepeater
+              model: root.panelProviders
+              delegate: ProviderSection { provider: modelData }
+            }
+
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              text: root.footerText
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              elide: Text.ElideRight
+            }
           }
 
-          Text {
-            textFormat: Text.PlainText
+          // Settings live on their own view: the agent list keeps its space,
+          // and the key entry appears only when the gear opens this.
+          Column {
+            id: settingsColumn
             width: parent.width
-            text: root.footerText
-            color: root.dim
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-            elide: Text.ElideRight
+            spacing: Style.space(8)
+            visible: root.settingsOpen
+
+            PanelSectionHeader {
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              text: "Agents in the bar"
+            }
+
+            Column {
+              width: parent.width
+              spacing: Style.space(6)
+
+              Repeater {
+                model: root.panelProviders
+
+                delegate: Row {
+                  width: parent.width
+                  spacing: Style.space(8)
+
+                  ProviderMark {
+                    id: toggleMark
+                    anchors.verticalCenter: parent.verticalCenter
+                    providerId: modelData.id
+                    markSize: Style.font.title
+                    color: root.foreground
+                  }
+
+                  Text {
+                    textFormat: Text.PlainText
+                    width: Math.max(0, parent.width - toggleMark.width - showToggle.width - parent.spacing * 2)
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: modelData.name + (modelData.available === false ? "  ·  not set up" : "")
+                    color: root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                    elide: Text.ElideRight
+                  }
+
+                  ToggleSwitch {
+                    id: showToggle
+                    anchors.verticalCenter: parent.verticalCenter
+                    checked: root.isShown(modelData.id)
+                    trackHeight: Style.space(16)
+                    foreground: root.foreground
+                    accent: Commons.Color.accent
+                    onToggled: root.setShown(modelData.id, !root.isShown(modelData.id))
+                  }
+                }
+              }
+            }
+
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              text: "A hidden agent stays out of the bar but remains listed here and in the agent list."
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
+
+            PanelSectionHeader {
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              text: "OpenRouter"
+            }
+
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              text: "A management key shows the whole account: this month's spend against its average, the credits left, and the keys that spent the most. It can create and delete API keys, so it is stored outside shell.json and is never shown again."
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
+
+            Row {
+              width: parent.width
+              spacing: Style.space(6)
+
+              Text {
+                id: keyStatus
+                textFormat: Text.PlainText
+                width: Math.max(0, parent.width - keyActions.width - parent.spacing)
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.keyStatusText
+                color: root.keyMessage !== "" ? root.stateColor("warning") : root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                wrapMode: Text.WordWrap
+              }
+
+              Row {
+                id: keyActions
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Style.space(2)
+
+                PanelActionButton {
+                  visible: !root.keyFromEnv
+                  iconText: "󰌋"
+                  tooltipText: root.keyStored ? "Change the management key" : "Set a management key"
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  enabled: !root.keyBusy && !root.keyEditing
+                  onClicked: root.beginKeyEdit()
+                }
+
+                PanelActionButton {
+                  visible: root.keyStored
+                  iconText: "󰆴"
+                  tooltipText: "Remove the management key"
+                  foreground: root.foreground
+                  hoverColor: root.urgent
+                  fontFamily: root.fontFamily
+                  enabled: !root.keyBusy
+                  onClicked: root.removeKey()
+                }
+              }
+            }
+
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              visible: root.keyFromEnv
+              text: "Set in the environment. Unset OPENROUTER_MANAGEMENT_KEY to manage it here."
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
+
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              visible: !root.keyStored && !root.keyFromEnv && !root.keyEditing && !root.keyBusy
+              text: "Create one at openrouter.ai/settings/management-keys, then paste it here."
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              font.underline: keySetupArea.containsMouse
+              wrapMode: Text.WordWrap
+
+              MouseArea {
+                id: keySetupArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: Qt.openUrlExternally("https://openrouter.ai/settings/management-keys")
+              }
+            }
+
+            Column {
+              width: parent.width
+              spacing: Style.space(4)
+              visible: root.keyEditing
+
+              onVisibleChanged: if (visible) Qt.callLater(function() { keyField.forceActiveFocus() })
+
+              Row {
+                width: parent.width
+                spacing: Style.space(4)
+
+                TextField {
+                  id: keyField
+                  width: Math.max(0, parent.width - keyStoreBtn.width - keyRevealBtn.width - parent.spacing * 2)
+                  password: true
+                  revealed: root.keyRevealed
+                  placeholderText: "sk-or-v1-…"
+                  foreground: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.body
+                  horizontalPadding: Style.spacing.controlGap
+                  verticalPadding: Style.spacing.controlPaddingY
+                  text: root.keyDraft
+                  enabled: !root.keyBusy
+                  onTextChanged: if (root.keyEditing && text !== root.keyDraft) root.keyDraft = text
+                  onAccepted: root.submitKey()
+                  Keys.onEscapePressed: root.cancelKeyEdit()
+                }
+
+                PanelActionButton {
+                  id: keyStoreBtn
+                  iconText: "󰄬"
+                  tooltipText: "Store the key"
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  enabled: !root.keyBusy && root.keyDraft.trim().length >= 16
+                  onClicked: root.submitKey()
+                }
+
+                PanelActionButton {
+                  id: keyRevealBtn
+                  iconText: root.keyRevealed ? "󰈉" : "󰈈"
+                  tooltipText: root.keyRevealed ? "Hide the key" : "Show the key"
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  onClicked: root.keyRevealed = !root.keyRevealed
+                }
+              }
+
+              Text {
+                textFormat: Text.PlainText
+                width: parent.width
+                text: "Esc cancels. The key is stored in the Secret Service (or a 0600 file if none answers)."
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                wrapMode: Text.WordWrap
+              }
+            }
+
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              visible: root.keyMessage !== ""
+              text: root.keyMessage
+              color: root.stateColor("warning")
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
+
+            PanelSectionHeader {
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              text: "Account view"
+            }
+
+            Row {
+              width: parent.width
+              spacing: Style.space(6)
+
+              Text {
+                textFormat: Text.PlainText
+                width: Math.max(0, parent.width - keyRowsStepper.width - parent.spacing)
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Top keys shown"
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                elide: Text.ElideRight
+              }
+
+              Stepper {
+                id: keyRowsStepper
+                anchors.verticalCenter: parent.verticalCenter
+                value: root.openrouterKeyRows
+                low: 0
+                high: 12
+                onChanged: function(next) { root.saveSetting("openrouterKeyRows", next) }
+              }
+            }
+
+            Row {
+              width: parent.width
+              spacing: Style.space(6)
+
+              Text {
+                textFormat: Text.PlainText
+                width: Math.max(0, parent.width - monthsStepper.width - parent.spacing)
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Average of the last N months"
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                elide: Text.ElideRight
+              }
+
+              Stepper {
+                id: monthsStepper
+                anchors.verticalCenter: parent.verticalCenter
+                value: root.openrouterAverageMonths
+                low: 0
+                high: 12
+                onChanged: function(next) { root.saveSetting("openrouterAverageMonths", next) }
+              }
+            }
+
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              text: "0 top keys hides the key rows; 0 months shows dollars only and makes no analytics request."
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
+
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              text: "Bar style, thresholds and other settings stay in the widget's settings."
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
           }
         }
 
@@ -935,6 +1460,52 @@ Panel {
     }
   }
 
+  // A number with minus/plus buttons, used by the settings view. The caller
+  // persists the new value and this component only reports it.
+  component Stepper: Row {
+    id: stepper
+    property int value: 0
+    property int low: 0
+    property int high: 99
+    signal changed(int value)
+    spacing: Style.space(2)
+
+    function step(delta) {
+      var next = Math.max(stepper.low, Math.min(stepper.high, stepper.value + delta))
+      if (next !== stepper.value) stepper.changed(next)
+    }
+
+    PanelActionButton {
+      iconText: "󰍴"
+      tooltipText: "Less"
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      enabled: stepper.value > stepper.low
+      onClicked: stepper.step(-1)
+    }
+
+    Text {
+      textFormat: Text.PlainText
+      anchors.verticalCenter: parent.verticalCenter
+      width: Style.space(20)
+      horizontalAlignment: Text.AlignHCenter
+      text: String(stepper.value)
+      color: root.foreground
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.body
+      font.bold: true
+    }
+
+    PanelActionButton {
+      iconText: "󰐕"
+      tooltipText: "More"
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      enabled: stepper.value < stepper.high
+      onClicked: stepper.step(1)
+    }
+  }
+
   component ProviderSection: Column {
     id: section
     property var provider: null
@@ -945,11 +1516,6 @@ Panel {
       return section.provider
         ? Model.windowsFor(section.provider, root.history, root.warnPercent, root.criticalPercent, root.orOptions)
         : []
-    }
-
-    function sectionSummary() {
-      var live = sectionWindows().filter(function(window) { return window.stale !== true })
-      return Model.highest(live.length > 0 ? live : sectionWindows())
     }
 
     PanelSeparator { foreground: root.foreground; visible: section.provider !== null }
@@ -989,8 +1555,8 @@ Panel {
       }
 
       Column {
-        width: Math.max(0, sectionHeader.width - sectionMark.width - sectionValue.width
-          - sectionToggle.width - sectionGrip.width - sectionHeader.spacing * 4)
+        width: Math.max(0, sectionHeader.width - sectionMark.width
+          - sectionGrip.width - sectionHeader.spacing * 2)
         anchors.verticalCenter: parent.verticalCenter
         spacing: Style.space(2)
 
@@ -1027,28 +1593,6 @@ Panel {
       }
 
       Text {
-        id: sectionValue
-        textFormat: Text.PlainText
-        visible: sectionSummary() !== null && sectionSummary().mode === "meter"
-        text: sectionSummary() ? Model.windowValueText(sectionSummary()) : ""
-        color: sectionSummary() ? root.stateColor(sectionSummary().color) : root.foreground
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.body
-        font.bold: true
-      }
-
-      ToggleSwitch {
-        id: sectionToggle
-        anchors.verticalCenter: parent.verticalCenter
-        checked: root.isShown(section.provider ? section.provider.id : "")
-        trackHeight: Style.space(16)
-        foreground: root.foreground
-        accent: Commons.Color.accent
-        onToggled: root.setShown(section.provider ? section.provider.id : "",
-          !root.isShown(section.provider ? section.provider.id : ""))
-      }
-
-      Text {
         id: sectionGrip
         textFormat: Text.PlainText
         anchors.verticalCenter: parent.verticalCenter
@@ -1058,8 +1602,6 @@ Panel {
         font.pixelSize: Style.font.body
       }
     }
-
-
     }
 
     Text {
@@ -1229,27 +1771,5 @@ Panel {
       wrapMode: Text.WordWrap
     }
 
-    // Where the OpenRouter management key comes from, never the key. There is
-    // deliberately no field to type one in: scripts/set-management-key.sh
-    // stores it outside the shell's settings.
-    Text {
-      textFormat: Text.PlainText
-      width: parent.width
-      visible: text !== ""
-      text: Model.managementKeyText(section.provider)
-      color: root.dim
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-      font.underline: keyHelpArea.containsMouse
-      wrapMode: Text.WordWrap
-
-      MouseArea {
-        id: keyHelpArea
-        anchors.fill: parent
-        hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-        onClicked: Qt.openUrlExternally("https://github.com/crueber/omarchy-plugin-agent-meters#openrouter-management-key")
-      }
-    }
   }
 }

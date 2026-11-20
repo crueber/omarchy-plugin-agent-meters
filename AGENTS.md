@@ -51,12 +51,16 @@ the scoped windows. An API-key sign-in has no plan limits and stays hidden.
 
 1. Never print, cache, or pass a key on a command line. OpenRouter keys are
    used only in the HTTPS header. The management key additionally never goes
-   into settings, manifest defaults, QML properties, IPC output, the
-   collector's JSON or error text (`scrub`); `collect.js` deletes
-   `OPENROUTER_MANAGEMENT_KEY` from its environment before spawning anything.
-   Do not add a text field for it; do not add a configurable API host or base
-   URL (that would redirect where the key is sent). Tests stub HTTPS with
-   `node -r scripts/test-https-stub.js`, never with a production override.
+   into settings, manifest defaults, IPC output, the collector's JSON or error
+   text (`scrub`); `collect.js` deletes `OPENROUTER_MANAGEMENT_KEY` from its
+   environment before spawning anything. The one input for it is the panel's
+   masked field: it lives only in `keyDraft`/`keyProc.pending`, goes to
+   `scripts/set-management-key.sh` on stdin, and is cleared on submit, Esc and
+   process exit. Never put it in a `setting()` key (that flows into
+   `shell.json`), an IPC payload, a command line, the cache or the logs. Do not
+   add a configurable API host or base URL (that would redirect where the key
+   is sent). Tests stub HTTPS with `node -r scripts/test-https-stub.js`, never
+   with a production override.
 2. `available` decides the bar. Do not add a provider that has neither a
    plan/limits nor a detected credential.
 3. Limits are clamped 0–100 and resets are epoch milliseconds.
@@ -67,10 +71,15 @@ the scoped windows. An API-key sign-in has no plan limits and stays hidden.
    migrate in `normalizeHistory`; do not bump `CACHE_VERSION` for this.
 5. Failed provider reads keep their last good numbers and gain `error`.
 6. Any text from a file or network goes through `plain()` before display.
-7. `panelProviders` is every available agent in `providerOrder` order;
-   `visibleProviders` removes the ones whose `show<Agent>` setting is false.
-   The panel lists `panelProviders` (so a hidden agent can be switched back on)
-   and the bar lists `visibleProviders`. The switch calls
+7. `availableProviders` is every available agent in `providerOrder` order;
+   `panelProviders` appends OpenRouter when it has no key, because its panel
+   section is where setting up a management key is explained; `visibleProviders`
+   removes the ones whose `show<Agent>` setting is false from
+   `availableProviders`. The panel lists `panelProviders` (so a hidden agent
+   can be switched back on) and the bar lists `visibleProviders`, so the
+   setup-only OpenRouter never reaches the bar. The per-agent switches live in
+   the panel's settings view (`settingsOpen`, the hero gear), not in the agent
+   rows, and call
    `omarchy bar set crueber.agent-meters show<Agent> true|false --json`.
 8. A missing cache must fetch once leadership settles; do not leave the first
    read to the five-minute poll. `Component.onCompleted` and the five-second
