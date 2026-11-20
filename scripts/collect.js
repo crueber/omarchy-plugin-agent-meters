@@ -940,10 +940,18 @@ function describeFailure(failure, endpoint, key) {
 function accountFailed(provider, failure, endpoint, key) {
   const described = describeFailure(failure, endpoint, key)
   if (described.status) provider.status = described.status
-  provider.error = plain(described.error + ' ' + NO_FALLBACK_NOTE, 300)
+  provider.error = plain(withNoFallback(described.error), 300)
   provider.money = null
   provider.limits = []
   return provider
+}
+
+// The failure keeps its own sentence and then says the inference key is not a
+// fallback, with a full stop between them (the refusal messages have none).
+function withNoFallback(message) {
+  const text = String(message || '').trim()
+  if (!text) return NO_FALLBACK_NOTE
+  return (/[.!?]$/.test(text) ? text : text + '.') + ' ' + NO_FALLBACK_NOTE
 }
 
 // Every page of `/api/v1/keys` (100 per page, at most MAX_KEY_PAGES). The API
@@ -1280,7 +1288,7 @@ async function collectOpenRouter() {
     provider.status = 'Management key not readable'
     provider.source = 'openrouter-management'
     provider.keySource = management.source
-    provider.error = plain(management.error + ' ' + NO_FALLBACK_NOTE, 300)
+    provider.error = plain(withNoFallback(management.error), 300)
     return provider
   }
 
